@@ -37,6 +37,31 @@ ALLOWED_HOSTS = ["*"]
 
 # Application definition
 
+SHARED_APPS = [
+    'django_tenants',
+    'core.tenants',
+]
+
+TENANT_APPS = [
+    'django.contrib.auth',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    'django.contrib.admin',
+    'django.contrib.humanize',
+    'django.contrib.contenttypes',
+
+    'widget_tweaks',
+    'django_cleanup.apps.CleanupConfig',
+    'django_user_agents',
+
+    'core.user',
+    'core.login',
+    'core.security',
+    'core.reports',
+    'core.pos',
+]
+
 DJANGO_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -59,11 +84,16 @@ LOCAL_APPS = [
     'core.reports',
     'core.security',
     'core.user',
+    'core.tenants',
 ]
 
-INSTALLED_APPS = DJANGO_APPS + LOCAL_APPS + THIRD_PARTY_APPS
+INSTALLED_APPS = list(SHARED_APPS) + [
+    app for app in TENANT_APPS
+    if app not in SHARED_APPS
+]
 
 MIDDLEWARE = [
+    'django_tenants.middleware.main.TenantMainMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -116,14 +146,24 @@ def get_db_config(environ_var='DATABASE_URL'):
 
 DATABASES = {
     'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'Aslan_pos',
-            'USER': 'postgres',
-            'PASSWORD': 'Postgres2025',
-            'HOST': 'localhost',
-            'PORT': '5432'
-            }
+        'ENGINE': 'django_tenants.postgresql_backend',
+        'NAME': 'Aslan_core',
+        'USER': 'postgres',
+        'PASSWORD': 'Postgres2025',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
 }
+
+DATABASE_ROUTERS = (
+    'django_tenants.routers.TenantSyncRouter',
+)
+
+PUBLIC_SCHEMA_NAME = 'public'
+
+TENANT_MODEL = "tenants.Client"
+
+TENANT_DOMAIN_MODEL = "tenants.Domain"
 
 # Password validation
 # https://docs.djangoproject.com/en/4.0/ref/settings/#auth-password-validators

@@ -36,9 +36,10 @@ class GroupPermissionMixin(GroupSessionMixin, object):
         return settings.LOGIN_REDIRECT_URL
 
     def get(self, request, *args, **kwargs):
-        # if request.user.is_superuser:
-        #     return super().get(request, *args, **kwargs)
-        group = request.session['group']
+        if request.user.is_superuser:
+            request.session['url_last'] = request.path
+            return super().get(request, *args, **kwargs)
+        group = request.session.get('group')
         permission_list = self.get_permissions()
         queryset = group.permissions.filter(codename__in=permission_list)
         if queryset.count() != len(permission_list):
