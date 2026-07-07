@@ -1,16 +1,521 @@
-html,
-body {
-    height: 100%;
+/* ==========================================================
+   SISTEMA DE DISEÑO AVANZADO - ASLAN CORE v1.0.0 (2026)
+========================================================== */
+:root {
+    --agro-deep: #14532d;
+    --agro-emerald: #16a34a;
+    --agro-emerald-hover: #15803d;
+    --agro-glow: rgba(22, 163, 74, 0.08);
+    
+    --slate-900: #0f172a;
+    --slate-700: #334155;
+    --slate-400: #94a3b8;
+    
+    --border-clean: #e2e8f0;
+    --bg-input-flat: #f8fafc;
+    --white: #ffffff;
+    
+    --bezier-senior: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-body {
+/* ==========================================================
+   RESET & REGLAS BASE
+========================================================== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
+    background: var(--white);
+    color: var(--slate-700);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+}
+
+.aslan-premium-auth {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* ==========================================================
+   PANEL IZQUIERDO: COMPOSICIÓN VISUAL IMPACTANTE (65%)
+========================================================== */
+.auth-visual-hero {
+    width: 65%;
+    height: 100%;
+    position: relative;
     display: flex;
     align-items: center;
-    padding-top: 40px;
-    padding-bottom: 40px;
-    background-color: #f5f5f5;
+    padding: 80px;
+    overflow: hidden;
 }
 
-.details {
-    font-weight: normal !important;
+/* Mecanismo del Slider de Imágenes */
+.hero-slider {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+}
+
+.slide-item {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 1.5s ease-in-out;
+    z-index: 1;
+}
+
+.slide-item.active {
+    opacity: 1;
+    z-index: 2;
+}
+
+/* Capa refinada de unificación cromática */
+.visual-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.90) 0%, rgba(240, 253, 244, 0.75) 100%);
+    z-index: 3;
+}
+
+/* Contenedor de Texto Principal */
+.hero-brand-presentation {
+    position: relative;
+    z-index: 10 !important;
+    max-width: 680px;
+    width: 100%;
+}
+
+.hero-brand-presentation h1 {
+    font-size: 64px !important;
+    font-weight: 900 !important;
+    color: var(--agro-deep) !important;
+    letter-spacing: -2px !important;
+    line-height: 1 !important;
+    margin-bottom: 10px;
+}
+
+.hero-brand-presentation h2 {
+    font-size: 26px !important;
+    font-weight: 600 !important;
+    color: var(--agro-emerald-hover) !important;
+    margin-top: 14px !important;
+    letter-spacing: -0.5px !important;
+}
+
+.hero-brand-presentation p {
+    margin-top: 20px !important;
+    font-size: 16px !important;
+    color: var(--slate-700) !important;
+    line-height: 1.6 !important;
+}
+
+/* ==========================================================
+   TARJETAS KPI PREMIUM (TEXTOS AMPLIOS E ÍCONOS VERDES CORREGIDOS)
+========================================================== */
+.hero-kpi-row {
+    display: flex !important;
+    gap: 20px !important;
+    margin-top: 48px !important;
+    flex-wrap: wrap !important;
+    position: relative !important;
+    z-index: 12 !important;
+}
+
+.kpi-premium-card {
+    background: rgba(255, 255, 255, 0.94) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    border-radius: 10px !important;
+    padding: 20px 24px !important;
+    min-width: 160px;
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+    transition: transform 0.3s var(--bezier-senior);
+}
+
+.kpi-premium-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px rgba(15, 23, 42, 0.12);
+}
+
+/* Línea de acento lateral (Verde corporativo) */
+.kpi-accent-line {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--agro-emerald);
+}
+
+/* Distribución interna */
+.kpi-header-meta {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    margin-bottom: 6px !important;
+}
+
+/* Número o Valor de la Tarjeta */
+.kpi-value {
+    font-size: 28px !important; /* Forzado grande y claro */
+    font-weight: 800 !important;
+    color: var(--agro-deep) !important;
+    letter-spacing: -0.5px !important;
+    display: inline-block !important;
+}
+
+/* Ícono Verde Premium con Resplandor de Fondo */
+.kpi-icon {
+    font-size: 26px !important;
+    color: #16a34a !important;
+    background: transparent !important;
+    width: auto !important;
+    height: auto !important;
+    display: inline-block !important;
+    text-shadow: 0 4px 8px rgba(22, 163, 74, 0.25) !important;
+    transition: transform 0.3s ease, text-shadow 0.3s ease !important;
+}
+
+.kpi-premium-card:hover .kpi-icon {
+    transform: scale(1.1) !important;
+    color: #15803d !important;
+    text-shadow: 0 6px 12px rgba(21, 128, 61, 0.4) !important;
+}
+
+/* Texto descriptivo inferior de la tarjeta */
+.kpi-label {
+    display: block !important;
+    color: #475569 !important;
+    font-size: 13.5px !important; /* Tamaño corporativo óptimo */
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    margin-top: 4px !important;
+}
+
+/* ==========================================================
+   PANEL DERECHO: LOGIN COMPACTO MINIMALISTA (35%)
+========================================================== */
+.auth-form-gate {
+    width: 35%;
+    height: 100%;
+    background: var(--white);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    border-left: 1px solid var(--border-clean);
+    z-index: 5;
+}
+
+.compact-form-anchor {
+    width: 100%;
+    max-width: 360px;
+}
+
+.clean-form-flow {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-brand-space {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end; /* 👈 Esto empuja el logo al extremo derecho */
+    margin-bottom: 28px;
+}
+
+.form-brand-logo {
+    height: 52px;
+    width: auto;
+    object-fit: contain;
+    filter: invert(25%) sepia(10%) saturate(400%) brightness(40%) contrast(90%);
+    transition: filter 0.3s ease;
+}
+
+.form-brand-logo:hover {
+    filter: invert(15%) sepia(10%) saturate(400%) brightness(30%) contrast(90%); /* Se oscurece un poco más (Gris Pizarra Intenso) */
+}
+
+.gate-header {
+    margin-bottom: 32px;
+}
+
+.gate-header h3 {
+    font-size: 30px !important;
+    font-weight: 700 !important;
+    color: var(--slate-900) !important;
+    letter-spacing: -0.5px !important;
+}
+
+.gate-subtitle {
+    font-size: 14px !important;
+    color: var(--slate-400) !important;
+    margin-top: 6px !important;
+}
+
+.gate-field-group {
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+}
+
+.gate-field-group label {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    color: var(--slate-700) !important;
+    margin-bottom: 6px !important;
+}
+
+.gate-input-context {
+    position: relative;
+    width: 100%;
+}
+
+.gate-field-group input {
+    width: 100%;
+    height: 46px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0 14px;
+    font-size: 14.5px !important;
+    color: var(--slate-900);
+    background-color: var(--bg-input-flat);
+    outline: none;
+    transition: var(--bezier-senior);
+}
+
+.gate-field-group input:focus {
+    border-color: var(--agro-emerald);
+    background-color: var(--white);
+    box-shadow: 0 0 0 4px var(--agro-glow);
+}
+
+.password-context input {
+    padding-right: 44px;
+}
+
+.btn-toggle-view {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 44px;
+    height: 100%;
+    border: none;
+    background: transparent;
+    color: var(--slate-400);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    transition: color 0.2s;
+}
+
+.btn-toggle-view:hover {
+    color: var(--slate-900);
+}
+
+.gate-actions-meta {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -4px;
+    margin-bottom: 24px;
+}
+
+.recovery-anchor {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: var(--agro-emerald-hover) !important;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.recovery-anchor:hover {
+    color: var(--agro-deep);
+    text-decoration: underline;
+}
+
+.btn-gate-execute {
+    width: 100%;
+    height: 46px;
+    border: none;
+    border-radius: 6px;
+    background: var(--agro-emerald);
+    color: var(--white);
+    font-size: 14.5px !important;
+    font-weight: 600 !important;
+    cursor: pointer;
+    transition: var(--bezier-senior);
+}
+
+.btn-gate-execute:hover {
+    background: var(--agro-emerald-hover);
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.15);
+}
+
+.gate-compliance {
+    display: flex;
+    gap: 10px;
+    margin-top: 28px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 6px;
+    border: 1px solid #f1f5f9;
+}
+
+.gate-compliance i {
+    font-size: 14px;
+    color: var(--slate-400);
+    margin-top: 1px;
+}
+
+.gate-compliance p {
+    font-size: 12px !important;
+    color: var(--slate-400) !important;
+    line-height: 1.4 !important;
+}
+
+.gate-copyright {
+    margin-top: 36px;
+    text-align: center;
+    font-size: 12px !important;
+    color: var(--slate-400) !important;
+}
+
+/* ==========================================================
+   RESPONSIVO INTEGRADO (MÓVILES Y TABLETS OPTIMIZADO)
+========================================================== */
+@media (max-width: 1024px) {
+    .auth-visual-hero { 
+        width: 45%; 
+        padding: 40px; 
+    }
+    .auth-form-gate { 
+        width: 55%; 
+    }
+    .hero-brand-presentation h1 { 
+        font-size: 46px !important; 
+    }
+    .hero-kpi-row { 
+        gap: 12px !important; 
+        margin-top: 32px !important; 
+    }
+}
+
+@media (max-width: 768px) {
+    body { 
+        overflow-y: auto; 
+    }
+    
+    /* Ocultamos el panel izquierdo en móviles */
+    .auth-visual-hero { 
+        display: none; 
+    } 
+    
+    /* El panel de login toma todo el protagonismo */
+    .auth-form-gate {
+        width: 100%;
+        height: 100vh;
+        padding: 40px 24px;
+        background: var(--white);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    /* Ampliamos el ancho máximo de la caja del formulario para que use más pantalla */
+    .compact-form-anchor { 
+        max-width: 440px; /* Sube de 360px a 440px en celular */
+        width: 100%;
+    }
+    
+    /* Ajustes visuales para rellenar el espacio y mejorar legibilidad */
+    .form-brand-space {
+        margin-bottom: 36px;
+    }
+    
+    .form-brand-logo {
+        height: 58px; /* Logo ligeramente más grande en celular */
+    }
+
+    .gate-header {
+        margin-bottom: 36px;
+    }
+
+    .gate-header h3 { 
+        font-size: 32px !important; /* Título de bienvenida con más presencia */
+    }
+    
+    .gate-subtitle {
+        font-size: 15px !important;
+    }
+
+    /* Campos de entrada más grandes y fáciles de pulsar en pantallas táctiles */
+    .gate-field-group {
+        margin-bottom: 24px;
+    }
+
+    .gate-field-group label {
+        font-size: 14px !important; /* Textos de "Usuario" y "Contraseña" más legibles */
+        margin-bottom: 8px !important;
+    }
+
+    .gate-field-group input {
+        height: 52px; /* Incrementamos la altura del input de 46px a 52px */
+        font-size: 16px !important; /* Evita que iOS/Android hagan zoom automático al enfocar */
+        padding: 0 16px;
+        border-radius: 8px;
+    }
+    
+    /* Ajuste para el botón del ojito en inputs más altos */
+    .btn-toggle-view {
+        width: 52px;
+        font-size: 17px;
+    }
+    
+    .recovery-anchor {
+        font-size: 14px !important;
+    }
+
+    /* Botón de iniciar sesión con más volumen */
+    .btn-gate-execute {
+        height: 52px; /* Sube a 52px para equilibrar con los inputs */
+        font-size: 16px !important;
+        border-radius: 8px;
+        margin-top: 8px;
+    }
+
+    /* Bloque de cumplimiento/seguridad inferior */
+    .gate-compliance {
+        margin-top: 36px;
+        padding: 16px;
+        border-radius: 8px;
+    }
+    
+    .gate-compliance p {
+        font-size: 13px !important;
+        line-height: 1.5 !important;
+    }
+
+    .gate-copyright {
+        margin-top: 44px;
+        font-size: 13px !important;
+    }
 }

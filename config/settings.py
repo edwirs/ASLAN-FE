@@ -60,6 +60,8 @@ TENANT_APPS = [
     'core.security',
     'core.reports',
     'core.pos',
+    'core.catalogs',
+    'core.production',
 ]
 
 DJANGO_APPS = [

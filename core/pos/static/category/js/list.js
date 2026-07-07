@@ -1,4 +1,4 @@
-var category = {
+var biologicalTargetCategory = {
     list: function () {
         $('#data').DataTable({
             autoWidth: false,
@@ -43,5 +43,5 @@ var category = {
 };
 
 $(function () {
-    category.list();
+    biologicalTargetCategory.list();
 });

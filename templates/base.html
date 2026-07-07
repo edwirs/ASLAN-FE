@@ -123,7 +123,7 @@
         >Inicio</a>
       </li>
 
-      {% if perms.pos.view_sale %}
+      <!--{% if perms.pos.view_sale %}
         <li class="nav-item">
           <a
             class="nav-link"
@@ -133,25 +133,25 @@
             Venta
           </a>
         </li>
-      {% endif %}
+      {% endif %}-->
       
-      {% if perms.pos.add_bar %}
+      <!--{% if perms.pos.add_bar %}
         <li class="nav-item">
           <a href="{% url 'order_list' %}" class="nav-link" >
             <i class="fas fa-clipboard-list"></i>
             Pedidos Mesas
           </a>
         </li>
-      {% endif %}
+      {% endif %}-->
 
-      {% if perms.pos.add_bar %}
+      <!--{% if perms.pos.add_bar %}
         <li class="nav-item">
           <a href="{% url 'bar_admin_create' %}" class="nav-link" >
             <i class="fas fa-bolt"></i>
             Ventas Rápidas
           </a>
         </li>
-      {% endif %}
+      {% endif %}-->
 
       <!--{% if perms.pos.add_bar %}
         <li class="nav-item">
@@ -251,7 +251,7 @@
         class="brand-image"
         style="opacity: .8"
       >
-      <span class="brand-text font-weight-light">ASLAN pos</span>
+      <span class="brand-text font-weight-light">Aslan Core</span>
     </a>
 
     <!-- Sidebar -->
@@ -281,7 +281,7 @@
           data-widget="treeview"
           role="menu"
         >
-        {% if perms.pos.view_client or perms.pos.view_provider %}
+        <!--{% if perms.pos.view_client or perms.pos.view_provider %}
           <li class="nav-item">
             <a
               href="#"
@@ -320,9 +320,9 @@
               {% endif %}
             </ul>
           </li>
-        {% endif %}
+        {% endif %} -->
 
-        {% if perms.pos.view_category or perms.pos.view_product %}
+        <!--{% if perms.pos.view_category or perms.pos.view_product %}
           <li class="nav-item">
             <a
               href="#"
@@ -373,9 +373,72 @@
               {% endif %}
             </ul>
           </li>
+        {% endif %} -->
+
+        {% if perms.production.view_plant_inventory or perms.production.view_plant_inventory_import %}
+          <li class="nav-item">
+            <a
+              href="#"
+              class="nav-link"
+            >
+              <i class="fas fa-seedling"></i>
+              <p>
+                Producción
+                <i class="fas fa-angle-left right"></i>
+              </p>
+            </a>
+
+            <ul class="nav nav-treeview">
+                {% if perms.production.view_plant_inventory_import %}
+                  <li class="nav-item">
+                    <a href="#" class="nav-link">
+                        <i class="far fa-circle nav-icon"></i>
+                        <p>
+                            Inventario Plantas
+                            <i class="right fas fa-angle-left"></i>
+                        </p>
+                    </a>
+                    
+                    {% if perms.production.view_plant_inventory_import %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'production:plant_inventory_import_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Importar</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.production.view_plant_inventory %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'production:plant_inventory_filter' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Consultar Inventario</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+                </li>
+                {% endif %}
+
+              {% if perms.pos.view_product %}
+                <li class="nav-item">
+                  <a
+                    class="nav-link"
+                    href="{% url 'production:mipe_dashboard' %}"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    MIPE
+                  </a>
+                </li>
+              {% endif %}
+            </ul>
+          </li>
         {% endif %}
 
-        {% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
+        <!--{{% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
           <li class="nav-item">
             <a
               href="#"
@@ -427,9 +490,9 @@
               {% endif %}
             </ul>
           </li>
-        {% endif %}
+        {% endif %}-->
 
-        {% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
+        <!--{{% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
           <li class="nav-item">
             <a
               href="#"
@@ -480,9 +543,9 @@
               {% endif %}
             </ul>
           </li>
-        {% endif %}
+        {% endif %}-->
 
-        {% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
+        <!--{{% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
           <li class="nav-item">
             <a
               href="#"
@@ -542,9 +605,9 @@
               {% endif %}
             </ul>
           </li>
-        {% endif %}
+        {% endif %}-->
 
-        {% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
+        <!--{% if perms.pos.add_bar or perms.pos.view_sale or perms.pos.view_buy or perms.pos.view_price %}
           <li class="nav-item">
             <a
               href="#"
@@ -599,9 +662,9 @@
               </ul>
             {% endif %}
           </li>
-        {% endif %}
+        {% endif %} -->
 
-        {% if perms.pos.report_sales_menu or perms.pos.report_employee_menu or perms.pos.report_employee_debe or perms.pos.report_employee_gain %}
+        <!-- {% if perms.pos.report_sales_menu or perms.pos.report_employee_menu or perms.pos.report_employee_debe or perms.pos.report_employee_gain %}
           <li class="nav-item">
             <a
               href="#"
@@ -648,6 +711,169 @@
                   <p>Ventas X Producto</p>
                 </a>
               </li>
+            </ul>
+          </li>
+        {% endif %} -->
+
+        {% if perms.pos.view_company or perms.security.view_dashboard or perms.user.view_user %}
+          <li class="nav-item">
+            <a
+              href="#"
+              class="nav-link"
+            >
+              <i class="fas fa-wrench"></i>
+              <p>
+                Configuraciones
+                <i class="fas fa-angle-left right"></i>
+              </p>
+            </a>
+
+            <ul class="nav nav-treeview">
+
+              {% if perms.catalogs.view_block %}
+                <li class="nav-item">
+                  <a
+                    class="nav-link"
+                    href="{% url 'catalogs:block_list' %}"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    Bloques
+                  </a>
+                </li>
+              {% endif %}
+
+              {% if perms.catalogs.view_variety_catalog %}
+                <li class="nav-item">
+                  <a
+                    class="nav-link"
+                    href="{% url 'catalogs:variety_catalog_manage' %}"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    Catálogo Variedades
+                  </a>
+                </li>
+              {% endif %}
+
+                {% if perms.catalogs.view_biological_target_category %}
+                  <li class="nav-item">
+                    <a href="#" class="nav-link">
+                        <i class="far fa-circle nav-icon"></i>
+                        <p>
+                            MIPE
+                            <i class="right fas fa-angle-left"></i>
+                        </p>
+                    </a>
+                    
+                    {% if perms.catalogs.view_biological_target_category %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'catalogs:biological_target_category_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Categorías BB</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.catalogs.view_biological_target_category %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'catalogs:biological_target_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Blancos Biológicos</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.catalogs.view_severity_grade %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'catalogs:severity_grade_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Grados de Severidad</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.catalogs.view_biological_target_category %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'catalogs:mipe_module_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Módulos Mipe</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.catalogs.view_biological_target_category %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'catalogs:assurance_parameter_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Parám. Aseguramiento</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+                </li>
+                {% endif %}
+
+                {% if perms.pos.view_table or perms.dashboard.view_dashboard  or  perms.user.view_user %}
+                  <li class="nav-item">
+                    <a href="#" class="nav-link">
+                        <i class="far fa-circle nav-icon"></i>
+                        <p>
+                            Generales
+                            <i class="right fas fa-angle-left"></i>
+                        </p>
+                    </a>
+                    
+                    {% if perms.pos.view_table %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'company_update' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Compañia</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.dashboard.view_dashboard %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'dashboard_update' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Conf. Dashboard</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.user.view_user %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'user_update_profile' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Actualizar Perfil</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+                </li>
+                {% endif %}
+
+                <!--{% if perms.pos.view_table %}
+                  <li class="nav-item">
+                    <a href="{% url 'table_list' %}" class="nav-link" >
+                      <i class="far fa-circle nav-icon"></i>
+                      <p>Mesas</p>
+                    </a>
+                  </li>
+                {% endif %}-->
             </ul>
           </li>
         {% endif %}
@@ -701,68 +927,6 @@
                   </a>
                 </li>
               {% endif %}
-            </ul>
-          </li>
-        {% endif %}
-
-        {% if perms.pos.view_company or perms.security.view_dashboard or perms.user.view_user %}
-          <li class="nav-item">
-            <a
-              href="#"
-              class="nav-link"
-            >
-              <i class="fas fa-wrench"></i>
-              <p>
-                Configuraciones
-                <i class="fas fa-angle-left right"></i>
-              </p>
-            </a>
-
-            <ul class="nav nav-treeview">
-                {% if perms.pos.view_table %}
-                  <li class="nav-item">
-                    <a href="{% url 'table_list' %}" class="nav-link" >
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Mesas</p>
-                    </a>
-                  </li>
-                {% endif %}
-
-                {% if perms.pos.view_table %}
-                  <li class="nav-item">
-                    <a
-                      href="{% url 'company_update' %}"
-                      class="nav-link"
-                    >
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Compañia</p>
-                    </a>
-                  </li>
-                {% endif %}
-
-                {% if perms.dashboard.view_dashboard %}
-                  <li class="nav-item">
-                    <a
-                      href="{% url 'dashboard_update' %}"
-                      class="nav-link"
-                    >
-                      <i class="far fa-circle nav-icon"></i>
-                      <p>Conf. Dashboard</p>
-                    </a>
-                  </li>
-                {% endif %}
-
-                {% if perms.user.view_user %}
-                  <li class="nav-item">
-                    <a
-                      class="nav-link"
-                      href="{% url 'user_update_profile' %}"
-                    >
-                      <i class="far fa-circle nav-icon"></i>
-                      Actualizar Perfil
-                    </a>
-                  </li>
-                {% endif %}
             </ul>
           </li>
         {% endif %}

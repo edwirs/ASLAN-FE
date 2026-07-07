@@ -1,20 +1,47 @@
-{% extends 'base.html' %}
 {% load static %}
-{% block assets %}
-    <link rel="stylesheet" href="{% static 'login/css/style.css' %}"/>
-    <script src="{% static 'js/main.js' %}"></script>
-    <script src="{% static 'js/functions.js' %}"></script>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="es">
 
-{% block body %}
-    <body class="text-center justify-content-center">
-        <div class="">
-            <div class=""></div>
-        </div>
-        <div class="justify-content-center">
-            {% block content_main %}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-            {% endblock %}
-        </div>
-    </body>
-{% endblock %}
+    <title>ASLAN CORE</title>
+
+    <!-- Bootstrap -->
+    <link rel="stylesheet" href="{% static 'lib/bootstrap-5.3.3/css/bootstrap.min.css' %}">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="{% static 'lib/fontawesome-6.5.2/css/all.min.css' %}">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+          rel="stylesheet">
+
+    <!-- CSS del login -->
+    <link rel="stylesheet" href="{% static 'login/css/style.css' %}">
+
+    {% block assets %}
+    {% endblock %}
+</head>
+
+<body>
+
+    {% block content_main %}
+    {% endblock %}
+
+    <!-- JQuery -->
+    <script src="{% static 'lib/jquery-3.7.1/jquery.min.js' %}"></script>
+
+    <!-- Bootstrap -->
+    <script src="{% static 'lib/bootstrap-5.3.3/js/bootstrap.bundle.min.js' %}"></script>
+
+    {% block javascript %}
+    {% endblock %}
+
+</body>
+
+</html>
