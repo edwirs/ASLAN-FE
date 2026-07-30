@@ -345,6 +345,12 @@ class SaleForm(forms.ModelForm):
                 'class': 'form-control',
                 'autocomplete': 'off'
             }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 7,
+                'placeholder': 'Observaciones de la venta...',
+                'style': 'resize:none;'
+            }),
         }
         
 def next_month_day_10():

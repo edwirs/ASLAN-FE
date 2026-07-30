@@ -4,6 +4,7 @@ sidebar-collapse
 {% endblock %}
 {% load widget_tweaks %}
 {% load static %}
+
 {% block assets_form %}
     <link rel="stylesheet" href="{% static 'lib/jquery-ui-1.12.1/jquery-ui.css' %}"/>
     <script src="{% static 'lib/jquery-ui-1.12.1/jquery-ui.min.js' %}"></script>
@@ -15,309 +16,385 @@ sidebar-collapse
     <script src="{% static 'lib/bootstrap-touchspin-4.2.5/js/jquery.bootstrap-touchspin.js' %}"></script>
     <script src="{% static 'lib/tempusdominus-bootstrap-4.5.37.0/js/tempusdominus-bootstrap.js' %}"></script>
     <link rel="stylesheet" href="{% static 'lib/tempusdominus-bootstrap-4.5.37.0/css/tempusdominus-bootstrap.css' %}"/>
-    <!-- Toastr CSS -->
     <link rel="stylesheet" href="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.css' %}">
-    <!-- Toastr JS -->
     <script src="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.js' %}"></script>
+
+    <style>
+        .card-custom {
+            border: none !important;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .form-section-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 800;
+            color: #111827 !important;
+            margin-bottom: 1rem;
+        }
+
+        .label-dark {
+            color: #1f2937 !important;
+            font-weight: 700 !important;
+        }
+
+        .invoice-summary-container {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e5e7eb;
+        }
+
+        .summary-divider {
+            border-right: 1px solid #d1d5db;
+            padding-right: 1.25rem;
+            margin-right: 1.25rem;
+        }
+
+        .summary-item {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
+        .summary-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+        }
+
+        .summary-item input {
+            text-align: right !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            font-size: 1.1rem !important;
+            font-weight: 700 !important;
+            color: #111827 !important;
+            padding: 0 !important;
+            height: auto !important;
+            cursor: default;
+        }
+
+        .summary-item-total .summary-label {
+            color: #059669 !important;
+            font-size: 0.95rem;
+        }
+
+        .summary-item-total input {
+            color: #059669 !important;
+            font-size: 1.35rem !important;
+            font-weight: 800 !important;
+        }
+
+        .card-fill-container {
+            display: flex;
+            flex-direction: column;
+        }
+        .card-fill-container .card-body {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .card-fill-container .form-group,
+        .card-fill-container textarea {
+            flex: 1 1 auto;
+            width: 100%;
+        }
+        .card-fill-container textarea {
+            resize: vertical;
+            min-height: 115px;
+        }
+
+        @media (max-width: 768px) {
+            .summary-divider {
+                border-right: none;
+                border-bottom: 1px solid #e5e7eb;
+                padding-right: 0;
+                margin-right: 0;
+                padding-bottom: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+            .summary-item {
+                text-align: left;
+            }
+            .summary-item input {
+                text-align: left !important;
+            }
+        }
+    </style>
 {% endblock %}
 
 {% block form_fields %}
-<div class="row">
-<div class="mb-4 card border p-3">
-        <div class="row">
-            <div class="col-12 col-lg-4 mb-3">
-                <label class="form-label fw-bold">Tipo Documento:</label>
-                {{ form.date_joined }}
-            </div>
-        </div>
-    </div>
-
-    <div class="mb-4 card border p-3">
-        <div class="row">
-            <div class="col-12 col-lg-4 mb-3">
-                <label class="form-label fw-bold">{{ form.date_joined.label }}:</label>
-                {{ form.date_joined }}
-            </div>
-            <div class="col-12 col-lg-4 mb-3">
-                <label class="form-label fw-bold">Rango de numeración:</label>
-                {{ form.date_joined }}
-            </div>
-            <div class="col-12 col-lg-4 mb-3">
-                <label class="form-label fw-bold">Consecutivo factura:</label>
-                {{ form.date_joined }}
-            </div>
-        </div>
-    </div>
-
-    <div class="mb-4 card border p-3">
-        <div class="row">
-            <!-- Selección del Cliente (Ocupa espacio central) -->
-            <div class="col-lg-6 mb-3">
-                <label class="form-label fw-bold">{{ form.client.label }}:</label>
-                <div class="input-group">
-                    <button class="btn btn-success btnAddClient" type="button" title="Crear cliente">
-                        <i class="fas fa-plus"></i>
-                    </button>
-                    {{ form.client }}
+<div class="row g-3">
+    <!-- Tipo de Registro -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white">
+            <div class="form-section-title"><i class="fas fa-file-alt me-1 mr-1"></i> Tipo de Registro</div>
+            <div class="row">
+                <div class="col-12 col-lg-4">
+                    <label class="form-label label-dark">Tipo Documento:</label>
+                    {{ form.date_joined }}
                 </div>
             </div>
+        </div>
+    </div>
 
-            <!-- Lista desplegable de correos (En la misma fila, alineado al lado del cliente) -->
-            <div class="col-lg-6 mb-3">
-                <label class="form-label fw-bold">Correo de Envío (Facturación Electrónica):</label>
-                <select id="client_email_select" name="client_email_target" class="form-control select2" style="width: 100%;">
-                    <option value="">---------</option>
-                </select>
+    <!-- Control de Documento -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white">
+            <div class="form-section-title"><i class="fas fa-hashtag me-1 mr-1"></i> Control de Documento</div>
+            <div class="row">
+                <div class="col-12 col-lg-4 mb-3 mb-lg-0">
+                    <label class="form-label label-dark"><i class="far fa-calendar-alt me-1 mr-1"></i>{{ form.date_joined.label }}:</label>
+                    {{ form.date_joined }}
+                </div>
+                <div class="col-12 col-lg-4 mb-3 mb-lg-0">
+                    <label class="form-label label-dark"><i class="fas fa-list-ol me-1 mr-1"></i>Rango de numeración:</label>
+                    {{ form.date_joined }}
+                </div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label label-dark"><i class="fas fa-receipt me-1 mr-1"></i>Consecutivo factura:</label>
+                    {{ form.date_joined }}
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="col-12 card border p-3 mb-4">
-        <div class="mb-3">
-            <label class="form-label fw-bold">Búsqueda de productos o servicios:</label>
-            <div class="row g-2 align-items-stretch">
-                <!-- Input de búsqueda -->
-                <div class="col-12 col-md-6">
-                    <input type="text" id="search_product" class="form-control form-control-lg h-100" autocomplete="off" name="search_product" placeholder="Ingrese el codigo de un producto o servicio">
-
+    <!-- Datos del Cliente -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white">
+            <div class="form-section-title"><i class="fas fa-user-tag me-1 mr-1"></i> Datos del Cliente</div>
+            <div class="row">
+                <div class="col-lg-6 mb-3 mb-lg-0">
+                    <label class="form-label label-dark">{{ form.client.label }}:</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <button class="btn btn-success btnAddClient" type="button" title="Crear cliente">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        {{ form.client }}
+                    </div>
                 </div>
-
-                <!-- Botones -->
-                <div class="col-12 col-md-3">
-                    <div class="d-grid d-md-flex h-100 align-items-stretch">
-                        <!--  <button class="btnSearchProducts btn btn-success flex-fill h-100 rounded-5 rounded-start" type="button">
-                            <i class="fas fa-search"></i> Buscar productos/servicios
-                        </button> -->
-                        <!-- <button class="btnClearProducts btn btn-warning flex-fill h-100 rounded-0" type="button">
-                            <i class="fas fa-times"></i> Limpiar búsqueda
-                        </button> -->
-                        <!-- <button class="btnRemoveAllProducts btn btn-danger flex-fill h-100 rounded-5 rounded-end" type="button">
-                            <i class="fas fa-trash-alt"></i> Borrar todo
-                        </button> -->
+                <div class="col-lg-6">
+                    <label class="form-label label-dark">Correo de Envío (Facturación Electrónica):</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text bg-light"><i class="fas fa-envelope text-muted"></i></span>
+                        </div>
+                        <input type="email" id="client_email" name="client_email" class="form-control" readonly placeholder="Correo electrónico del cliente...">
                     </div>
                 </div>
             </div>
         </div>
+    </div>
 
-        <!-- Tabla responsive -->
-        <div class="table-responsive">
-            <table class="table table-bordered" id="tblProducts">
-                <thead>
-                <tr>
-                    <th style="width: 5%;"></th>
-                    <th style="width: 30%;">Producto</th>
-                    <th style="width: 10%;">Cantidad</th>
-                    <th style="width: 10%;">Descuento %</th>
-                    <th style="width: 10%;">P./Unitario</th>
-                    <th style="width: 10%;">Total</th>
-                </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+    <!-- Detalle de Items -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white">
+            <div class="form-section-title"><i class="fas fa-boxes me-1 mr-1"></i> Detalle de Items</div>
+            <div class="mb-4">
+                <label class="form-label label-dark">Búsqueda de productos o servicios:</label>
+                <div class="row g-2 align-items-stretch">
+                    <div class="col-12 col-md-6">
+                        <div class="input-group">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                            </div>
+                            <input type="text" id="search_product" class="form-control form-control-lg" autocomplete="off" name="search_product" placeholder="Ingrese el código de un producto o servicio">
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <div class="d-grid d-md-flex h-100 align-items-stretch"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered align-middle" id="tblProducts">
+                    <thead class="bg-light">
+                        <tr>
+                            <th style="width: 5%;" class="text-center"></th>
+                            <th style="width: 30%;" class="text-dark font-weight-bold">Producto</th>
+                            <th style="width: 10%;" class="text-center text-dark font-weight-bold">Cantidad</th>
+                            <th style="width: 10%;" class="text-center text-dark font-weight-bold">Descuento %</th>
+                            <th style="width: 10%;" class="text-end text-right text-dark font-weight-bold">P./Unitario</th>
+                            <th style="width: 10%;" class="text-end text-right text-dark font-weight-bold">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
     <!-- Totales -->
-    <div class="col-12 card border p-3 mb-4">
-        <div class="row">
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.subtotal_12_sin_iva.label|upper }}</label>
-                {{ form.subtotal_12_sin_iva }}
-            </div>
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.iva.label|upper }}</label>
-                {{ form.iva }}
-            </div>
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.total_iva.label|upper }}</label>
-                {{ form.total_iva }}
-            </div>
-            <!--<div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.dscto.label|upper }}</label>
-                {{ form.dscto }}
-            </div>-->
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.total_dscto.label|upper }}</label>
-                {{ form.total_dscto }}
-            </div>
-            <div class="col-12 col-md mb-2">
-            <label class="form-label fw-bold">{{ form.total.label|upper }}</label>
-                {{ form.total }}
+    <div class="col-12">
+        <div class="invoice-summary-container">
+            <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch align-items-md-center">
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Total Bruto</span>
+                    {{ form.subtotal_12_sin_iva }}
+                </div>
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Descuentos</span>
+                    {{ form.total_dscto }}
+                </div>
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Subtotal</span>
+                    {{ form.iva }}
+                </div>
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Impuesto (IVA)</span>
+                    {{ form.total_iva }}
+                </div>
+                <div class="summary-item summary-item-total">
+                    <span class="summary-label">Total</span>
+                    {{ form.total }}
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Totales Finales -->
-    <div class="col-12 col-lg-4 card border p-3 ms-auto mb-4">
-        <div class="mb-3 d-none">
-            <label class="form-label fw-bold">{{ form.service_type.label }}:</label>
-            {{ form.service_type }}
+    <!-- Descripción y Pagos -->
+    <div class="col-12 mt-3">
+        <div class="row">
+           <div class="col-lg-8 mb-4">
+    <div class="card card-custom h-100 bg-white card-fill-container">
+        <div class="card-header bg-transparent border-0 pt-3 pb-0">
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <h6 class="mb-0 font-weight-bold text-dark" style="color: #334155 !important;">Observaciones</h6>
+                <small class="text-muted mb-0" id="charCountDisplay" style="font-size: 0.85rem;">(0/500)</small>
+            </div>
         </div>
+        <div class="card-body pt-2">
+            <div class="form-group mb-0">
+                {{ form.description }}
+            </div>
+        </div>
+    </div>
+</div>
 
-        <div class="row mb-3">
-            <div class="col">
-                <label class="form-label fw-bold">{{ form.paymentmethod.label }}:</label>
-                {{ form.paymentmethod }}
-            </div>
-            <div class="col d-none">
-                <label class="form-label fw-bold">{{ form.transfermethods.label }}:</label>
-                {{ form.transfermethods }}
+            <div class="col-lg-4 mb-4">
+                <div class="card card-custom h-100 bg-white">
+                    <div class="card-header bg-transparent border-0 pt-3 pb-0">
+                        <h6 class="mb-0 font-weight-bold label-dark"><i class="far fa-credit-card me-1 mr-1"></i> Método y Forma de Pago</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3 d-none">
+                            <label class="form-label label-dark">{{ form.service_type.label }}:</label>
+                            {{ form.service_type }}
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.typemethods.label }}:</label>
+                                {{ form.typemethods }}
+                            </div>
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.expiration_date.label }}:</label>
+                                {{ form.expiration_date }}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.paymentmethod.label }}:</label>
+                                {{ form.paymentmethod }}
+                            </div>
+                            <div class="col d-none">
+                                <label class="form-label label-dark">{{ form.transfermethods.label }}:</label>
+                                {{ form.transfermethods }}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.nequi_value.label }}:</label>
+                                {{ form.nequi_value }}
+                            </div>
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.daviplata_value.label }}:</label>
+                                {{ form.daviplata_value }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+    </div>
 
-        <div class="row mb-3 d-none">
-            <div class="col transfermethods">
-                <label class="form-label fw-bold">{{ form.typemethods.label }}:</label>
-                {{ form.typemethods }}
+    <!-- Módulo de Carga de Comprobantes PDF -->
+    <div class="col-12">
+        <div class="card card-custom card-outline card-primary collapsed-card" id="cardPdfSection">
+            <div class="card-header border-0 bg-transparent" style="cursor: pointer;" data-card-widget="collapse">
+                <h3 class="card-title font-weight-bold text-dark">
+                    <i class="fas fa-file-pdf text-danger mr-2 me-2"></i> Comprobantes / Documentos Adjuntos
+                </h3>
+                <div class="card-tools">
+                    <span class="badge badge-secondary mr-2 me-2" id="pdfCountBadge">0 archivos</span>
+                    <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                        <i class="fas fa-plus" id="pdfChevron"></i>
+                    </button>
+                </div>
             </div>
-            <div class="col">
-                <label class="form-label fw-bold">{{ form.expiration_date.label }}:</label>
-                {{ form.expiration_date }}
-            </div>
-        </div>
+            <div class="card-body pt-0" style="display: none;">
+                <div class="form-group mb-3">
+                    <label class="label-dark">Seleccionar archivo(s) PDF:</label>
+                    <input class="form-control-file" type="file" id="form-file-multi" name="pdf_files" accept="application/pdf,.pdf" multiple>
+                    <small class="form-text text-muted">Puede seleccionar múltiples archivos PDF manteniendo presionada la tecla Ctrl.</small>
+                </div>
 
-        <div class="row mb-3 d-none">
-            <div class="col">
-                <label class="form-label fw-bold">{{ form.cash.label }}:</label>
-                {{ form.cash }}
+                <div id="pdfMainContainer" class="d-none">
+                    <div class="row">
+                        <div class="col-lg-5 mb-3">
+                            <div class="card h-100 shadow-none border">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                                    <span class="font-weight-bold text-secondary small text-uppercase">Documentos cargados</span>
+                                    <button type="button" class="btn btn-link text-danger btn-sm p-0 font-weight-bold" onclick="clearAllPdfs(event)">
+                                        <i class="fas fa-trash-alt mr-1 me-1"></i> Quitar todos
+                                    </button>
+                                </div>
+                                <div class="card-body p-0" style="max-height: 420px; overflow-y: auto;">
+                                    <ul class="list-group list-group-flush" id="pdfFileList"></ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="card h-100 shadow-none border">
+                                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                                    <span class="font-weight-bold text-dark small text-truncate" id="pdfActiveTitle">Selecciona un archivo para previsualizar</span>
+                                    <span class="badge badge-info" id="pdfActiveSize"></span>
+                                </div>
+                                <div class="card-body p-1" style="background-color: #525659; min-height: 420px;">
+                                    <iframe id="pdfEmbed" type="application/pdf" width="100%" height="450px" style="border: none;"></iframe>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="col">
-                <label class="form-label fw-bold">{{ form.propina.label }}:</label>
-                {{ form.propina }}
-            </div>
-        </div>
-        <div class="row mb-3">
-            <div class="col">
-                <label class="form-label fw-bold">{{ form.nequi_value.label }}:</label>
-                {{ form.nequi_value }}
-            </div>
-            <div class="col">
-                <label class="form-label fw-bold">{{ form.daviplata_value.label }}:</label>
-                {{ form.daviplata_value }}
-            </div>
-        </div>
-        <div class="mb-3 d-none">
-            <label class="form-label fw-bold">{{ form.change.label }}:</label>
-            {{ form.change }}
         </div>
     </div>
 </div>
 {% endblock %}
 
-
 {% block buttons %}
-    <button type="submit" class="btn btn-primary">
-        <i class="fas fa-file-invoice-dollar"></i> Guardar y Enviar
+    <button type="submit" class="btn btn-primary px-4 shadow-sm">
+        <i class="fas fa-file-invoice-dollar mr-1 me-1"></i> Guardar y Enviar
     </button>
-    <a href="{{ list_url }}" class="btn btn-danger">
-        <i class="fas fa-times"></i> Cancelar
+    <a href="{{ list_url }}" class="btn btn-danger px-4 shadow-sm">
+        <i class="fas fa-times mr-1 me-1"></i> Cancelar
     </a>
 {% endblock %}
 
 {% block content_form_before %}
-    <div class="modal fade" tabindex="-1" id="myModalSearchProducts">
-        <div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-sm-down">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold">
-                        <i class="fa fa-search"></i> Búsqueda de productos
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <table style="width:100%;" class="table table-bordered table-sm" id="tblSearchProducts">
-                        <thead>
-                            <tr>
-                                <th>Código</th>
-                                <th>Nombre</th>
-                                <th>P./Unitario</th>
-                                <th>Stock</th>
-                                <th>Agregar</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="modal fade" tabindex="-2" id="myModalClient">
-        <div class="modal-dialog">
-            <form class="form" id="frmClient" method="POST" autocomplete="off">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title fw-bold">
-                            <i class="fa fa-plus"></i> Nuevo registro de un cliente
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="container-fluid">
-                            {% for field in frmClient.visible_fields %}
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">{{ field.label }}:</label>
-                                    {{ field|add_class:'form-control' }}
-                                </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <div class="container-fluid">
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="fas fa-save"></i> Guardar registro
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
+    <!-- Archivo JS externo referenciado -->
     <script src="{% static 'salefe/admin/js/form.js' %}"></script>
-    <script type="application/javascript">
-        sale.detail.iva = {{ company.iva|safe }};
-        $(function () {
-            sale.listProducts();
-
-            {% if action == 'update' %}
-                sale.detail.products = {{ products|safe }};
-                sale.listProducts();
-
-                // Deshabilitar todo excepto pago
-                $('input, select, textarea').prop('disabled', true);
-                $('select[name="paymentmethod"], select[name="transfermethods"], input[name="cash"]').prop('disabled', false);
-
-                select_client.select2('trigger', 'select', {
-                    data: {{ client|safe }}
-                });
-
-                // Quitar botones de eliminar producto
-                $('#tblProducts tbody').find('a[rel="remove"]').remove();
-                $('#tblProducts thead').find('th:last').remove(); // quita cabecera "Acciones"
-
-                // Bloquear también los botones globales
-                $('#search_product, .btnRemoveAll').prop('disabled', true);
-
-                // Anular eventos que hacen ajax en update
-                $('#search_product').off();
-                $('.btnRemoveAll').off();
-                $('#tblProducts tbody').off('click', 'a[rel="remove"]');
-            {% else %}
-                sale.listProducts();
-                {% if final_consumer %}
-                    select_client.select2('trigger', 'select', {data: {{ final_consumer|safe }}} );
-                {% endif %}
-                $('#search_product').focus();
-            {% endif %}
-
-            {% if final_consumer %}
-                select_client.select2('trigger', 'select', {data: {{ final_consumer|safe }}});
-            {% endif %}
-            $('#search_product').focus();
-        });
-    </script>
-
     <iframe id="print_frame" style="display:none;"></iframe>
 {% endblock %}

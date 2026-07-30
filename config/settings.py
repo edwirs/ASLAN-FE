@@ -149,9 +149,9 @@ def get_db_config(environ_var='DATABASE_URL'):
 DATABASES = {
     'default': {
         'ENGINE': 'django_tenants.postgresql_backend',
-        'NAME': 'Aslan_core',
+        'NAME': 'aslanFe',
         'USER': 'postgres',
-        'PASSWORD': 'Postgres2025',
+        'PASSWORD': '1496',
         'HOST': 'localhost',
         'PORT': '5432',
     }

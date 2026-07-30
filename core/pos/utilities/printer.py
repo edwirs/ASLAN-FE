@@ -2,15 +2,14 @@ import mimetypes
 from pathlib import Path
 from urllib.parse import urlparse
 
-import weasyprint
+
 from crum import get_current_request
 from django.conf import settings
 from django.contrib.staticfiles.finders import find
 from django.core.files.storage import default_storage
 from django.template.loader import get_template
 from django.urls import get_script_prefix
-from weasyprint import CSS
-from weasyprint import HTML
+
 
 from config import settings
 

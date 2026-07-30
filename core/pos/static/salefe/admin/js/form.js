@@ -6,6 +6,12 @@ var select_typemethods;
 var tblProducts, tblSearchProducts;
 var expiration_date;
 var input_search_product, input_birthdate, input_date_joined, input_cash, input_change;
+var input_propina, input_nequi_value, input_daviplata_value;
+
+// Variables globales para el manejo de múltiples PDFs
+var pdfDataTransfer = new DataTransfer();
+var selectedPdfUrls = [];
+var activePdfIndex = -1;
 
 var sale = {
     detail: {
@@ -24,10 +30,14 @@ var sale = {
         var tax = this.detail.iva / 100;
 
         this.detail.products.forEach(function (value, index, array) {
+            var cant = parseFloat(value.cant) || 0;
+            var pvp = parseFloat(value.pvp) || 0;
+            var dscto = parseFloat(value.dscto) || 0;
+
             value.iva = parseFloat(tax);
-            value.price_with_vat = value.pvp + (value.pvp * value.iva);
-            value.subtotal = value.pvp * value.cant;
-            value.total_dscto = value.subtotal * parseFloat((value.dscto / 100));
+            value.price_with_vat = pvp + (pvp * value.iva);
+            value.subtotal = pvp * cant;
+            value.total_dscto = value.subtotal * (dscto / 100);
             value.total_iva = (value.subtotal - value.total_dscto) * value.iva;
             value.total = value.subtotal - value.total_dscto;
         });
@@ -35,7 +45,10 @@ var sale = {
         this.detail.subtotal_0 = this.detail.products.filter(value => !value.with_tax).reduce((a, b) => a + (b.total || 0), 0);
         this.detail.subtotal_12 = this.detail.products.filter(value => value.with_tax).reduce((a, b) => a + (b.total || 0), 0);
         this.detail.subtotal = parseFloat(this.detail.subtotal_0) + parseFloat(this.detail.subtotal_12);
-        this.detail.dscto = parseFloat($('input[name="dscto"]').val());
+        
+        var dscto_global = parseFloat($('input[name="dscto"]').val());
+        this.detail.dscto = isNaN(dscto_global) ? 0.00 : dscto_global;
+
         this.detail.total_dscto = this.detail.subtotal * (this.detail.dscto / 100);
         this.detail.total_iva = this.detail.products.filter(value => value.with_tax).reduce((a, b) => a + (b.total_iva || 0), 0);
         this.detail.total = this.detail.subtotal - this.detail.total_dscto;
@@ -49,11 +62,12 @@ var sale = {
         $('input[name="total_dscto"]').val(this.detail.total_dscto.toLocaleString('es-CL'));
         $('input[name="total"]').val(this.detail.total.toLocaleString('es-CL')); 
 
-        var cash = parseFloat(input_cash.val());
+        var cash = parseFloat(input_cash.val()) || 0;
         var change = cash - sale.detail.total;
-        input_change.val(change);
+        input_change.val(change.toFixed(2));
     },
     addProduct: function (item) {
+        if (!item.dscto) item.dscto = 0;
         this.detail.products.push(item);
         this.listProducts();
     },
@@ -80,67 +94,54 @@ var sale = {
             ],
             columnDefs: [
                 {
-                    targets: [-5],
-                    class: 'text-center',
-                    render: function (data, type, row) {
-                        
-                        return data;
-                    }
-                },
-                {
-                    targets: [-3],
-                    class: 'text-center',
-                    render: function (data, type, row) {
-                        return '<input type="text" class="form-control" autocomplete="off" name="cant" value="' + row.cant + '">';
-                    }
-                },
-                {
-                    targets: [-4],
-                    class: 'text-center',
-                    render: function (data, type, row) {
-                        return '<input type="text" class="form-control" autocomplete="off" name="dscto_unitary" value="' + row.dscto_unitary + '">';
-                    }
-                },
-                {
-                    targets: [-1, -2],
-                    class: 'text-center',
-                    render: function (data, type, row) {
-                        return '$' + parseFloat(data).toLocaleString('es-CL');
-                    }
-                },
-                {
                     targets: [0],
                     class: 'text-center',
                     render: function (data, type, row) {
                         return '<a rel="remove" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></a>';
                     }
                 },
+                {
+                    targets: [1],
+                    class: 'text-left',
+                    render: function (data, type, row) {
+                        return data;
+                    }
+                },
+                {
+                    targets: [2],
+                    class: 'text-center',
+                    render: function (data, type, row) {
+                        return '<input type="number" step="1" min="1" class="form-control text-center" autocomplete="off" name="cant" value="' + row.cant + '">';
+                    }
+                },
+                {
+                    targets: [3],
+                    class: 'text-center',
+                    render: function (data, type, row) {
+                        var valDscto = row.dscto !== undefined ? row.dscto : 0;
+                        return '<input type="number" step="0.01" min="0" max="100" class="form-control text-center" autocomplete="off" name="dscto_unitary" value="' + valDscto + '">';
+                    }
+                },
+                {
+                    targets: [4],
+                    class: 'text-center',
+                    render: function (data, type, row) {
+                        return '<input type="number" step="0.01" min="0" class="form-control text-center" autocomplete="off" name="pvp" value="' + row.pvp + '">';
+                    }
+                },
+                {
+                    targets: [5],
+                    class: 'text-center',
+                    render: function (data, type, row) {
+                        return '$' + parseFloat(data).toLocaleString('es-CL');
+                    }
+                }
             ],
             rowCallback: function (row, data, index) {
                 var tr = $(row).closest('tr');
-                var stock = !data.is_service ? data.stock : 1000000;
-                tr.find('input[name="cant"]')
-                    .TouchSpin({
-                        min: 1,
-                        max: stock
-                    })
-                    .on('keypress', function (e) {
-                        return validate_text_box({'event': e, 'type': 'numbers'});
-                    });
-
-                tr.find('input[name="dscto_unitary"]')
-                    .TouchSpin({
-                        min: 0.00,
-                        max: 100,
-                        step: 0.01,
-                        decimals: 2,
-                        boostat: 5,
-                        maxboostedstep: 10,
-                        postfix: "0.00"
-                    })
-                    .on('keypress', function (e) {
-                        return validate_text_box({'event': e, 'type': 'decimals'});
-                    });
+                tr.find('input[name="cant"], input[name="dscto_unitary"], input[name="pvp"]').on('keypress', function (e) {
+                    return validate_text_box({'event': e, 'type': 'decimals'});
+                });
             },
             initComplete: function (settings, json) {
 
@@ -164,6 +165,75 @@ $(function () {
     input_propina = $('input[name="propina"]');
     input_nequi_value = $('input[name="nequi_value"]');
     input_daviplata_value = $('input[name="daviplata_value"]');
+
+    // Asegurar enctype en el formulario principal para soportar archivos
+    var $form = $('#form-file-multi').closest('form');
+    if ($form.length === 0) $form = $('form');
+    $form.attr('enctype', 'multipart/form-data');
+
+    // Escucha para la selección de archivos PDF múltiples
+    $('#form-file-multi').on('change', function() {
+        handlePdfFilesSelect(this.files);
+    });
+
+    // --- CONTADOR DE CARACTERES EN TIEMPO REAL (Posicionado a la derecha automáticamente) ---
+    var maxLength = 500;
+    var $textareaDesc = $('textarea[name="description"], #id_description');
+    
+    if ($textareaDesc.length) {
+        $textareaDesc.attr('maxlength', maxLength);
+
+        // Buscar el label asociado al campo de descripción para colocar el contador a la derecha
+        var $formGroup = $textareaDesc.closest('.form-group');
+        var $label = $formGroup.find('label').first();
+        
+        if ($label.length) {
+            // Asegurar que el label ocupe todo el ancho con flex para empujar el contador a la derecha
+            $label.css({
+                'display': 'flex',
+                'justify-content': 'space-between',
+                'align-items': 'center',
+                'width': '100%'
+            });
+            
+            // Si el span no está dentro del label, lo movemos dentro para que la alineación flex lo mande a la esquina derecha
+            var $counter = $('#charCountDisplay');
+            if ($counter.length && $counter.parent()[0] !== $label[0]) {
+                $counter.detach().appendTo($label);
+            }
+        } else {
+            // Plan de respaldo si no encuentra label: flotarlo a la derecha justo encima del textarea
+            $('#charCountDisplay').css({
+                'float': 'right',
+                'display': 'block',
+                'margin-bottom': '2px'
+            });
+        }
+
+        function updateCharCount() {
+            var textLength = $textareaDesc.val() ? $textareaDesc.val().length : 0;
+            $('#charCountDisplay').text('(' + textLength + '/' + maxLength + ')');
+        }
+
+        updateCharCount();
+
+        $textareaDesc.on('input keyup paste change', function() {
+            var textLength = $(this).val() ? $(this).val().length : 0;
+            if (textLength > maxLength) {
+                $(this).val($(this).val().substring(0, maxLength));
+                textLength = maxLength;
+            }
+            $('#charCountDisplay').text('(' + textLength + '/' + maxLength + ')');
+        });
+    }
+
+    // Animación de iconos para el Collapse del Card de PDFs
+    $('#cardPdfSection').on('expanded.lte.cardwidget', function () {
+        $('#pdfChevron').removeClass('fa-plus').addClass('fa-minus');
+    });
+    $('#cardPdfSection').on('collapsed.lte.cardwidget', function () {
+        $('#pdfChevron').removeClass('fa-minus').addClass('fa-plus');
+    });
 
     // Client
 
@@ -213,12 +283,13 @@ $(function () {
 
     select_transfermethods.parent().hide(); 
 
-    // referencias
+    // Referencias
     const nequiGroup = $('input[name="nequi_value"]').closest('.col');
     const daviplataGroup = $('input[name="daviplata_value"]').closest('.col');
     nequiGroup.hide();
     daviplataGroup.hide();
-    // helper
+
+    // Helper
     function toggleMixtoFields(show) {
         if (show) {
             nequiGroup.show();
@@ -276,7 +347,6 @@ $(function () {
     select_service_type.on('change', function(){
         const selectedValue = $(this).val();
 
-        // Si la forma de pago es transferencia o tarjeta, llenar cash con el total
         if (['delivery'].includes(selectedValue)) {
             var totalStr = $('input[name="total"]').val();
             totalStr = totalStr.replace(/\./g, '').replace(',', '.');
@@ -314,6 +384,13 @@ $(function () {
         },
         placeholder: 'Ingrese un nombre o número de cedula de un cliente',
         minimumInputLength: 1,
+    })
+    .on('select2:select', function (e) {
+        var data = e.params.data;
+        $('#client_email').val(data.email || '');
+    })
+    .on('select2:unselect', function (e) {
+        $('#client_email').val('');
     });
 
     $('.btnAddClient').on('click', function () {
@@ -482,23 +559,30 @@ $(function () {
             tblSearchProducts.row(tr.row).remove().draw();
         });
 
-    // Detail products
+    // Detail products (Actualizaciones dinámicas de la tabla)
 
     $('#tblProducts tbody')
         .off()
-        .on('change', 'input[name="cant"]', function () {
+        .on('change keyup', 'input[name="cant"]', function () {
             var tr = tblProducts.cell($(this).closest('td, li')).index();
-            sale.detail.products[tr.row].cant = parseInt($(this).val());
+            var cant = parseInt($(this).val());
+            sale.detail.products[tr.row].cant = isNaN(cant) ? 0 : cant;
             sale.calculateInvoice();
-            $('td:last', tblProducts.row(tr.row).node()).html('$' + sale.detail.products[tr.row].total.toFixed(2));
+            $('td:last', tblProducts.row(tr.row).node()).html('$' + sale.detail.products[tr.row].total.toLocaleString('es-CL'));
         })
-        .on('change', 'input[name="dscto_unitary"]', function () {
+        .on('change keyup', 'input[name="dscto_unitary"]', function () {
             var tr = tblProducts.cell($(this).closest('td, li')).index();
-            sale.detail.products[tr.row].dscto = parseFloat($(this).val());
+            var dscto = parseFloat($(this).val());
+            sale.detail.products[tr.row].dscto = isNaN(dscto) ? 0 : dscto;
             sale.calculateInvoice();
-            var parent = $(this).closest('.bootstrap-touchspin');
-            parent.find('.bootstrap-touchspin-postfix').children().html(sale.detail.products[tr.row].total_dscto.toFixed(2));
-            $('td:last', tblProducts.row(tr.row).node()).html('$' + sale.detail.products[tr.row].total.toFixed(2));
+            $('td:last', tblProducts.row(tr.row).node()).html('$' + sale.detail.products[tr.row].total.toLocaleString('es-CL'));
+        })
+        .on('change keyup', 'input[name="pvp"]', function () {
+            var tr = tblProducts.cell($(this).closest('td, li')).index();
+            var pvp = parseFloat($(this).val());
+            sale.detail.products[tr.row].pvp = isNaN(pvp) ? 0 : pvp;
+            sale.calculateInvoice();
+            $('td:last', tblProducts.row(tr.row).node()).html('$' + sale.detail.products[tr.row].total.toLocaleString('es-CL'));
         })
         .on('click', 'a[rel="remove"]', function () {
             var tr = tblProducts.cell($(this).closest('td, li')).index();
@@ -515,7 +599,7 @@ $(function () {
             max: 100,
             step: 0.01,
             decimals: 2,
-            boostat: 5,
+            boustat: 5,
             maxboostedstep: 10,
         })
         .on('change touchspin.on.min touchspin.on.max', function () {
@@ -533,7 +617,7 @@ $(function () {
             max: 100000000,
             step: 0.01,
             decimals: 2,
-            boostat: 5,
+            boustat: 5,
             maxboostedstep: 10
         })
         .off('change')
@@ -564,7 +648,7 @@ $(function () {
             max: 100000000,
             step: 0.01,
             decimals: 2,
-            boostat: 5,
+            boustat: 5,
             maxboostedstep: 10
         })
         .off('change')
@@ -581,7 +665,7 @@ $(function () {
             max: 100000000,
             step: 0.01,
             decimals: 2,
-            boostat: 5,
+            boustat: 5,
             maxboostedstep: 10
         })
         .off('change')
@@ -598,7 +682,7 @@ $(function () {
             max: 100000000,
             step: 0.01,
             decimals: 2,
-            boostat: 5,
+            boustat: 5,
             maxboostedstep: 10
         })
         .off('change')
@@ -614,7 +698,7 @@ $(function () {
         "closeButton": true,
         "progressBar": true,
         "positionClass": "toast-top-right",
-        "timeOut": "0",              // 👈 Nunca se cierra solo
+        "timeOut": "0",
         "extendedTimeOut": "0"
     };
     
@@ -636,19 +720,14 @@ $(function () {
                 dialog_action({
                     'content': '¿Desea imprimir la boleta de venta?',
                     'success': function () {
-                        //window.open(request.print_url, '_blank');
-                        //location.href = url_refresh;
                         var iframe = document.getElementById('print_frame');
                         iframe.src = request.print_url;
                         iframe.onload = function() {
-                            // Cuando termine de cargar, abre el cuadro de impresión
                             iframe.contentWindow.focus();
                             iframe.contentWindow.print();
 
-                            // Cuando se cierre el cuadro de impresión (imprimir o cancelar)
                             iframe.contentWindow.onafterprint = function() {
                                 toastr.success('La factura se guardó exitosamente');
-                                // 👇 Retarda la redirección 2 segundos para que se vea el toastr
                                 setTimeout(function() {
                                     location.href = url_refresh;
                                 }, 1000);
@@ -667,3 +746,128 @@ $(function () {
         submit_with_formdata(args);
     });
 });
+
+// --- FUNCIONES PARA LA GESTIÓN DE ARCHIVOS PDF MÚLTIPLES ---
+
+function handlePdfFilesSelect(files) {
+    if (!files || files.length === 0) return;
+
+    var addedAny = false;
+    for (var i = 0; i < files.length; i++) {
+        var file = files[i];
+
+        if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
+            pdfDataTransfer.items.add(file);
+            addedAny = true;
+        } else {
+            if (typeof toastr !== 'undefined') {
+                toastr.error('El archivo "' + file.name + '" no es un documento PDF válido.');
+            }
+        }
+    }
+
+    if (addedAny) {
+        syncPdfInputAndUI();
+        selectPdfFile(pdfDataTransfer.files.length - 1);
+    }
+}
+
+function syncPdfInputAndUI() {
+    var input = document.getElementById('form-file-multi');
+    if (input) input.files = pdfDataTransfer.files;
+
+    var totalFiles = pdfDataTransfer.files.length;
+    var $list = $('#pdfFileList');
+
+    selectedPdfUrls.forEach(function(url) {
+        if (url) URL.revokeObjectURL(url);
+    });
+    selectedPdfUrls = [];
+    $list.empty();
+
+    if (totalFiles > 0) {
+        $('#pdfMainContainer').removeClass('d-none');
+        $('#pdfCountBadge')
+            .removeClass('badge-secondary')
+            .addClass('badge-success')
+            .text(totalFiles + (totalFiles === 1 ? ' archivo' : ' archivos'));
+
+        for (var index = 0; index < totalFiles; index++) {
+            var file = pdfDataTransfer.files[index];
+            var blobUrl = URL.createObjectURL(file);
+            selectedPdfUrls.push(blobUrl);
+            var fileSizeMB = (file.size / (1024 * 1024)).toFixed(2);
+
+            var itemHtml = `
+                <li class="list-group-item p-2 ${index === activePdfIndex ? 'active' : ''}" 
+                    onclick="selectPdfFile(${index})" style="cursor: pointer;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="text-truncate mr-2 me-2" style="max-width: 85%;">
+                            <i class="fas fa-file-pdf mr-1 me-1"></i>
+                            <span class="font-weight-bold">${file.name}</span>
+                            <small class="d-block text-muted">${fileSizeMB} MB</small>
+                        </div>
+                        <button type="button" class="btn btn-outline-danger btn-sm border-0" 
+                                onclick="removePdfFile(event, ${index})" title="Quitar este PDF">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </li>
+            `;
+            $list.append(itemHtml);
+        }
+    } else {
+        $('#pdfMainContainer').addClass('d-none');
+        $('#pdfEmbed').attr('src', '');
+        $('#pdfActiveTitle').text('Selecciona un archivo para previsualizar');
+        $('#pdfActiveSize').text('');
+   
+        activePdfIndex = -1;
+    }
+}
+
+function selectPdfFile(index) {
+    if (index >= 0 && index < pdfDataTransfer.files.length) {
+        activePdfIndex = index;
+        var file = pdfDataTransfer.files[index];
+
+        $('#pdfEmbed').attr('src', selectedPdfUrls[index]);
+        $('#pdfActiveTitle').text(file.name);
+        $('#pdfActiveSize').text((file.size / (1024 * 1024)).toFixed(2) + ' MB');
+
+        $('#pdfFileList .list-group-item').removeClass('active');
+        $('#pdfFileList .list-group-item').eq(index).addClass('active');
+    }
+}
+
+function removePdfFile(event, indexToRemove) {
+    if (event) event.stopPropagation();
+
+    var newDt = new DataTransfer();
+    for (var i = 0; i < pdfDataTransfer.files.length; i++) {
+        if (i !== indexToRemove) {
+            newDt.items.add(pdfDataTransfer.files[i]);
+        }
+    }
+    pdfDataTransfer = newDt;
+
+    if (activePdfIndex === indexToRemove) {
+        activePdfIndex = pdfDataTransfer.files.length - 1;
+    } else if (activePdfIndex > indexToRemove) {
+        activePdfIndex--;
+    }
+
+    syncPdfInputAndUI();
+    if (pdfDataTransfer.files.length > 0) {
+        selectPdfFile(activePdfIndex >= 0 ? activePdfIndex : 0);
+    }
+}
+
+function clearAllPdfs(event) {
+    if (event) event.stopPropagation();
+    pdfDataTransfer = new DataTransfer();
+    activePdfIndex = -1;
+    var input = document.getElementById('form-file-multi');
+    if (input) input.value = '';
+    syncPdfInputAndUI();
+}
