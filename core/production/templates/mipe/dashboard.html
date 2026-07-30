@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block body_class %}
-sidebar-collapse
+
 {% endblock %}
 
 {% block form_fields %}
@@ -26,7 +26,7 @@ sidebar-collapse
 
     </div>
 
-    <div class="row g-3">
+    <div class="row g-3 justify-content-center">
 
         {% for module in modules %}
 
@@ -74,12 +74,14 @@ sidebar-collapse
 
 <style>
 
-.module-card{
+.module-card {
     border: none;
     border-radius: 15px;
     transition: all .3s ease;
     cursor: pointer;
-    height: 180px; /* altura fija */
+    height: 160px;
+    max-width: 200px;
+    margin: 0 auto;
 }
 
 .module-disabled{

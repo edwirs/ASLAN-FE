@@ -1,5 +1,7 @@
 {% extends 'form.html' %}
+{% load widget_tweaks %}
 {% load static %}
+
 {% block assets_form %}
     <script src="{% static 'lib/select2-4.0.13/js/select2.min.js' %}"></script>
     <script src="{% static 'lib/select2-4.0.13/js/i18n/es.js' %}"></script>
@@ -8,4 +10,265 @@
     <script src="{% static 'lib/tempusdominus-bootstrap-4.5.37.0/js/tempusdominus-bootstrap.js' %}"></script>
     <link rel="stylesheet" href="{% static 'lib/tempusdominus-bootstrap-4.5.37.0/css/tempusdominus-bootstrap.css' %}"/>
     <script src="{% static 'client/js/form.js' %}"></script>
+{% endblock %}
+
+{% block form_fields %}
+<form method="post" enctype="multipart/form-data" id="frmForm">
+    {% csrf_token %}
+    
+    <div class="card card-primary card-tabs mb-0">
+        <div class="card-header p-0 pt-1">
+            <ul class="nav nav-tabs" id="client-tabs" role="tablist">
+                <li class="nav-item">
+                    <a class="nav-link active" id="tab-profile-link" data-toggle="tab" href="#tab-profile" role="tab" aria-controls="tab-profile" aria-selected="true">
+                        <i class="fas fa-user"></i> <b>Perfil del Cliente</b>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" id="tab-contacts-link" data-toggle="tab" href="#tab-contacts" role="tab" aria-controls="tab-contacts" aria-selected="false">
+                        <i class="fas fa-address-book"></i> <b>Contactos Adicionales</b>
+                    </a>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="card-body">
+            {% if form.errors or contacts_formset.errors %}
+                <div class="alert alert-danger alert-dismissible">
+                    <h5><i class="icon fas fa-ban"></i> Ha ocurrido un error al guardar el registro</h5>
+                    {{ form.errors }}
+                    {{ contacts_formset.errors }}
+                </div>
+            {% endif %}
+
+            <div class="tab-content" id="client-tabs-content">
+                
+                <!-- PESTAÑA 1: PERFIL -->
+                <div class="tab-pane fade show active" id="tab-profile" role="tabpanel" aria-labelledby="tab-profile-link">
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.document_type.label }}:</label>
+                                {{ form.document_type }}
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.dni.label }}:</label>
+                                <div class="input-group">
+                                    {{ form.dni }}
+                                    <div class="input-group-append" style="width: 70px;">
+                                        {{ form.dv }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.person_type.label }}:</label>
+                                {{ form.person_type }}
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.tax_responsibility.label }}:</label>
+                                {{ form.tax_responsibility }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row" id="row-names-commercial">
+                        <div class="col-lg-6" id="container-names">
+                            <div class="form-group">
+                                <label>{{ form.names.label }}:</label>
+                                {{ form.names }}
+                            </div>
+                        </div>
+                        <div class="col-lg-6" id="container-commercial">
+                            <div class="form-group">
+                                <label>{{ form.commercial_name.label }}:</label>
+                                {{ form.commercial_name }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.gender.label }}:</label>
+                                {{ form.gender }}
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.birthdate.label }}:</label>
+                                {{ form.birthdate }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.email.label }}:</label>
+                                {{ form.email }}
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div class="form-group">
+                                <label>{{ form.mobile.label }}:</label>
+                                {{ form.mobile }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label>{{ form.country.label }}:</label>
+                                {{ form.country }}
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label>{{ form.municipality.label }}:</label>
+                                {{ form.municipality }}
+                            </div>
+                        </div>
+                        <div class="col-lg-4">
+                            <div class="form-group">
+                                <label>{{ form.address.label }}:</label>
+                                {{ form.address }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-12">
+                            <div class="form-group">
+                                <div class="form-check">
+                                    {{ form.is_active }}
+                                    <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                        {{ form.is_active.label }}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PESTAÑA 2: CONTACTOS ADICIONALES -->
+                <div class="tab-pane fade" id="tab-contacts" role="tabpanel" aria-labelledby="tab-contacts-link">
+                    {% if contacts_formset.management_form %}
+                        {{ contacts_formset.management_form }}
+                    {% else %}
+                        <input type="hidden" name="clientcontact_set-TOTAL_FORMS" id="id_clientcontact_set-TOTAL_FORMS" value="{{ contacts_formset|length }}">
+                        <input type="hidden" name="clientcontact_set-INITIAL_FORMS" id="id_clientcontact_set-INITIAL_FORMS" value="0">
+                        <input type="hidden" name="clientcontact_set-MIN_NUM_FORMS" id="id_clientcontact_set-MIN_NUM_FORMS" value="0">
+                        <input type="hidden" name="clientcontact_set-MAX_NUM_FORMS" id="id_clientcontact_set-MAX_NUM_FORMS" value="1000">
+                    {% endif %}
+
+                    <div class="row mb-3">
+                        <div class="col-lg-12">
+                            <button type="button" class="btn btn-success btn-sm btn-flat" id="add-contact">
+                                <i class="fas fa-plus"></i> Añadir Contacto
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div id="contacts-container">
+                        {% for contact_form in contacts_formset %}
+                            <div class="contact-row card card-body bg-light mb-3">
+                                <div class="row align-items-center">
+                                    {{ contact_form.id }}
+                                    <div class="col-lg-3">
+                                        <div class="form-group mb-0">
+                                            <label>Nombres:</label>
+                                            {{ contact_form.names }}
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-3">
+                                        <div class="form-group mb-0">
+                                            <label>Correo:</label>
+                                            {{ contact_form.email }}
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-2">
+                                        <div class="form-group mb-0">
+                                            <label>Cargo:</label>
+                                            {{ contact_form.position }}
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-2">
+                                        <div class="form-group mb-0">
+                                            <label>Teléfono:</label>
+                                            {{ contact_form.phone }}
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-2 text-center">
+                                        <div class="form-group mb-0">
+                                            <label class="d-block">&nbsp;</label>
+                                            {% if contacts_formset.can_delete %}
+                                                <div style="display:none;">{{ contact_form.DELETE }}</div>
+                                            {% endif %}
+                                            <button type="button" class="btn btn-danger btn-sm btn-flat remove-contact">
+                                                <i class="fas fa-trash-alt"></i> Eliminar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Template oculto para clonar nuevos contactos dinámicamente -->
+<script type="text/template" id="contact-template">
+    <div class="contact-row card card-body bg-light mb-3">
+        <div class="row align-items-center">
+            <input type="hidden" name="clientcontact_set-__prefix__-id" id="id_clientcontact_set-__prefix__-id">
+            <div class="col-lg-3">
+                <div class="form-group mb-0">
+                    <label>Nombres:</label>
+                    <input type="text" name="clientcontact_set-__prefix__-names" class="form-control" placeholder="Nombre del contacto" id="id_clientcontact_set-__prefix__-names">
+                </div>
+            </div>
+            <div class="col-lg-3">
+                <div class="form-group mb-0">
+                    <label>Correo:</label>
+                    <input type="email" name="clientcontact_set-__prefix__-email" class="form-control" placeholder="Correo electrónico" id="id_clientcontact_set-__prefix__-email">
+                </div>
+            </div>
+            <div class="col-lg-2">
+                <div class="form-group mb-0">
+                    <label>Cargo:</label>
+                    <input type="text" name="clientcontact_set-__prefix__-position" class="form-control" placeholder="Cargo (Opcional)" id="id_clientcontact_set-__prefix__-position">
+                </div>
+            </div>
+            <div class="col-lg-2">
+                <div class="form-group mb-0">
+                    <label>Teléfono:</label>
+                    <input type="text" name="clientcontact_set-__prefix__-phone" class="form-control" placeholder="Teléfono (Opcional)" id="id_clientcontact_set-__prefix__-phone">
+                </div>
+            </div>
+            <div class="col-lg-2 text-center">
+                <div class="form-group mb-0">
+                    <label class="d-block">&nbsp;</label>
+                    <div style="display:none;"><input type="checkbox" name="clientcontact_set-__prefix__-DELETE" id="id_clientcontact_set-__prefix__-DELETE"></div>
+                    <button type="button" class="btn btn-danger btn-sm btn-flat remove-contact">
+                        <i class="fas fa-trash-alt"></i> Eliminar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
 {% endblock %}

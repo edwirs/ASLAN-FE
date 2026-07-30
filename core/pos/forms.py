@@ -1,5 +1,6 @@
 from django import forms
 from datetime import date
+from django.forms import inlineformset_factory
 
 from .models import *
 
@@ -110,14 +111,38 @@ class ClientForm(forms.ModelForm):
         model = Client
         fields = '__all__'
         widgets = {
-            'names': forms.TextInput(attrs={'placeholder': 'Ingrese un nombre'}),
-            'dni': forms.TextInput(attrs={'placeholder': 'Ingrese un número de cedula'}),
-            'gender': forms.Select(attrs={
-                'class': 'select2',
+            'document_type': forms.Select(attrs={
+                'class': 'form-control select2',
                 'style': 'width: 100%'
             }),
-            'mobile': forms.TextInput(attrs={'placeholder': 'Ingrese un teléfono celular'}),
-            'email': forms.TextInput(attrs={'placeholder': 'Ingrese un email'}),
+            'dni': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Número de identificación'
+            }),
+            'dv': forms.TextInput(attrs={
+                'class': 'form-control text-center',
+                'placeholder': 'DV'
+            }),
+            'person_type': forms.Select(attrs={
+                'class': 'form-control select2',
+                'style': 'width: 100%'
+            }),
+            'tax_responsibility': forms.Select(attrs={
+                'class': 'form-control select2',
+                'style': 'width: 100%'
+            }),
+            'names': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nombres y apellidos'
+            }),
+            'commercial_name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Nombre comercial (Opcional)'
+            }),
+            'gender': forms.Select(attrs={
+                'class': 'form-control select2',
+                'style': 'width: 100%'
+            }),
             'birthdate': forms.DateInput(format='%Y-%m-%d', attrs={
                 'class': 'form-control datetimepicker-input',
                 'id': 'birthdate',
@@ -125,10 +150,29 @@ class ClientForm(forms.ModelForm):
                 'data-toggle': 'datetimepicker',
                 'data-target': '#birthdate'
             }),
-            'address': forms.TextInput(attrs={
-                'placeholder': 'Ingrese una dirección'
+            'country': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'País'
             }),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'})
+            'municipality': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Municipio o ciudad'
+            }),
+            'address': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Dirección'
+            }),
+            'mobile': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Número celular'
+            }),
+            'email': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Correo electrónico'
+            }),
+            'is_active': forms.CheckboxInput(attrs={
+                'class': 'form-check-input'
+            })
         }
 
     def save(self, commit=True):
@@ -141,6 +185,32 @@ class ClientForm(forms.ModelForm):
         except Exception as e:
             data['error'] = str(e)
         return data
+
+ClientContactFormSet = inlineformset_factory(
+    Client,
+    ClientContact,
+    fields=('names', 'email', 'position', 'phone'),
+    extra=0, 
+    can_delete=True,
+    widgets={
+        'names': forms.TextInput(attrs={
+            'class': 'form-control', 
+            'placeholder': 'Nombre del contacto'
+        }),
+        'email': forms.EmailInput(attrs={
+            'class': 'form-control', 
+            'placeholder': 'Correo electrónico'
+        }),
+        'position': forms.TextInput(attrs={
+            'class': 'form-control', 
+            'placeholder': 'Cargo (Opcional)'
+        }),
+        'phone': forms.TextInput(attrs={
+            'class': 'form-control', 
+            'placeholder': 'Teléfono (Opcional)'
+        }),
+    }
+)
     
 class ProviderForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):

@@ -19,6 +19,7 @@ class BiologicalTargetCategory(models.Model):
     name = models.CharField(max_length=150,unique=True,verbose_name='Nombre')
     description = models.TextField(blank=True,null=True,verbose_name='Descripción')
     is_active = models.BooleanField(default=True,verbose_name='Estado')
+    handle_traps = models.BooleanField(default=False, verbose_name='Maneja trampas')
 
     def __str__(self):
         return self.name
@@ -303,6 +304,34 @@ class BedSection(models.Model):
 
         return item
 
+class MonitoringSettings(models.Model):
+    bed_section = models.ForeignKey(BedSection, on_delete=models.CASCADE, verbose_name='Cuadro de cama')
+    is_monitored = models.BooleanField(default=False, verbose_name='¿Monitorear?')
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Selección de Monitoreo'
+        verbose_name_plural = 'Selecciones de Monitoreo'
+        default_permissions = ()
+        permissions = (
+            ('add_monitoring_settings', 'Crear si hay monitoreo'),
+            ('change_monitoring_settings', 'Editar si hay monitoreo'),
+            ('delete_monitoring_settings', 'Eliminar si hay monitoreo'),
+            ('view_monitoring_settings', 'Consultar si hay monitoreo'),
+        )
+
+    def __str__(self):
+        # Navegamos desde la sección hasta el bloque para mostrar una descripción clara
+        return f"Monitoreo: {self.bed_section.bed.bay.block.name} - {self.bed_section}"
+
+    def toJSON(self):
+        item = {
+            'id': self.id,
+            'bed_section_id': self.bed_section.id,
+            'is_monitored': self.is_monitored,
+        }
+        return item
+
 class Genus(models.Model):
     name = models.CharField(max_length=100, unique=True, verbose_name="Género")
     is_active = models.BooleanField(default=True, verbose_name="Activo")
@@ -441,3 +470,101 @@ class AssuranceParameter(models.Model):
             'description': self.description or '',
             'is_active': self.is_active,
         }
+
+class TrapICA(models.Model):
+    name = models.CharField(max_length=150, verbose_name="Nombre")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+    is_active = models.BooleanField(default=True, verbose_name="Estado")
+
+    class Meta:
+        verbose_name = "Trampa ICA"
+        verbose_name_plural = "Trampas ICA"
+        ordering = ['name']
+        default_permissions = ()
+        permissions = (
+            ('view_trap_ica', 'Consultar trampas ICA'),
+            ('add_trap_ica', 'Crear trampas ICA'),
+            ('change_trap_ica', 'Editar trampas ICA'),
+            ('delete_trap_ica', 'Eliminar trampas ICA'),
+        )
+
+    def __str__(self):
+        return self.name
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        return item
+
+class TrapCopitarsia(models.Model):
+    name = models.CharField(max_length=150, verbose_name="Nombre")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+    is_active = models.BooleanField(default=True, verbose_name="Estado")
+
+    class Meta:
+        verbose_name = "Trampa Copitarsia"
+        verbose_name_plural = "Trampas Copitarsia"
+        ordering = ['name']
+        default_permissions = ()
+        permissions = (
+            ('view_trap_copitarsia', 'Consultar trampas Copitarsia'),
+            ('add_trap_copitarsia', 'Crear trampas Copitarsia'),
+            ('change_trap_copitarsia', 'Editar trampas Copitarsia'),
+            ('delete_trap_copitarsia', 'Eliminar trampas Copitarsia'),
+        )
+
+    def __str__(self):
+        return self.name
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        return item
+
+class TrapIn(models.Model):
+    block = models.ForeignKey(Block, on_delete=models.PROTECT, verbose_name="Bloque")
+    name = models.CharField(max_length=150, verbose_name="Nombre")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+    is_active = models.BooleanField(default=True, verbose_name="Estado")
+
+    class Meta:
+        verbose_name = "Trampa Interna"
+        verbose_name_plural = "Trampas Internas"
+        ordering = ['name']
+        default_permissions = ()
+        permissions = (
+            ('view_trap_in', 'Consultar trampas internas'),
+            ('add_trap_in', 'Crear trampas internas'),
+            ('change_trap_in', 'Editar trampas internas'),
+            ('delete_trap_in', 'Eliminar trampas internas'),
+        )
+
+    def __str__(self):
+        return self.name
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        item['block'] = self.block.toJSON()
+        return item
+
+class TrapOut(models.Model):
+    name = models.CharField(max_length=150, verbose_name="Nombre")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+    is_active = models.BooleanField(default=True, verbose_name="Estado")
+
+    class Meta:
+        verbose_name = "Trampa Externa"
+        verbose_name_plural = "Trampas Externas"
+        ordering = ['name']
+        default_permissions = ()
+        permissions = (
+            ('view_trap_in', 'Consultar trampas externas'),
+            ('add_trap_in', 'Crear trampas externas'),
+            ('change_trap_in', 'Editar trampas externas'),
+            ('delete_trap_in', 'Eliminar trampas externas'),
+        )
+
+    def __str__(self):
+        return self.name
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        return item

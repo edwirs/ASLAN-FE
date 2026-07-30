@@ -7,6 +7,7 @@ from core.catalogs.views.block.views import *
 from core.catalogs.views.severity_grade.views import *
 from core.catalogs.views.variety_catalog.views import *
 from core.catalogs.views.assurance_parameter.views import *
+from core.catalogs.views.trap.views import *
 
 app_name = 'catalogs'
 
@@ -38,11 +39,16 @@ urlpatterns = [
     #configuración bloques
     path('block/',BlockListView.as_view(),name='block_list'),
     path('block/structure/',BlockStructureCreateView.as_view(),name='block_structure_create'),
+    path('block/structure/update/<int:pk>/', BlockStructureCreateView.as_view(), name='block_structure_update'),
 
     # catalogo de variedades
     path('variedades/administrar/', VarietyCatalogView.as_view(), name='variety_catalog_manage'),
 
     # parametros de aseguramiento
-    path(
-        'assurance/parameters/', AssuranceParameterListView.as_view(), name='assurance_parameter_list'),
+    path('assurance/parameters/', AssuranceParameterListView.as_view(), name='assurance_parameter_list'),
+
+    # trampas
+    path('trap/list/', TrapListView.as_view(), name='trap_list'),
+    path('trap/ica/add/', TrapListView.as_view(), name='trap_ica_create'),
+    path('trap/copitarsia/add/', TrapListView.as_view(), name='trap_copi_create'),
 ]

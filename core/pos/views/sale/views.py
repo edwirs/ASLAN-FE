@@ -191,8 +191,26 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                 for i in Client.objects.filter(Q(names__icontains=term) | Q(dni__icontains=term)).order_by('names')[0:10]:
                     data.append(i.toJSON())
             elif action == 'create_client':
-                form = ClientForm(self.request.POST)
-                data = form.save()
+                with transaction.atomic():
+                    form = ClientForm(self.request.POST)
+                    contacts_formset = ClientContactFormSet(self.request.POST)
+                    
+                    if form.is_valid() and contacts_formset.is_valid():
+                        client = form.save(commit=False)
+                        client.save()
+                        
+                        contacts_formset.instance = client
+                        contacts_formset.save()
+                        
+                        # Retornamos el objeto serializado del cliente recién creado
+                        data = client.toJSON()
+                    else:
+                        errors = {}
+                        if form.errors:
+                            errors.update(form.errors)
+                        if contacts_formset.errors:
+                            errors.update({'contacts': contacts_formset.errors})
+                        data['error'] = errors
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
@@ -208,6 +226,7 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data()
         context['frmClient'] = ClientForm()
+        context['frmClientContacts'] = ClientContactFormSet() # Añadido para el contexto si se requiere renderizar en modal o vista
         context['list_url'] = self.success_url
         context['title'] = 'Nuevo registro de una Venta'
         context['action'] = 'add'

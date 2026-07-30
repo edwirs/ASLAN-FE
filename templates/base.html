@@ -281,6 +281,50 @@
           data-widget="treeview"
           role="menu"
         >
+              {% if perms.pos.view_client %}
+                <li class="nav-item">
+                  <a
+                    href="{% url 'client_list' %}"
+                    class="nav-link"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Clientes</p>
+                  </a>
+                </li>
+              {% endif %}
+              {% if perms.pos.view_product %}
+                <li class="nav-item">
+                  <a
+                    href="{% url 'product_list' %}"
+                    class="nav-link"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Productos</p>
+                  </a>
+                </li>
+              {% endif %}
+              {% if perms.pos.view_sale %}
+                <li class="nav-item">
+                  <a
+                    href="{% url 'sale_Fe_admin_list' %}"
+                    class="nav-link"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Facturas Electrónicas</p>
+                  </a>
+                </li>
+              {% endif %}
+              {% if perms.pos.view_category %}
+                <li class="nav-item">
+                  <a
+                    href="{% url 'category_list' %}"
+                    class="nav-link"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Categorías</p>
+                  </a>
+                </li>
+              {% endif %}
         <!--{% if perms.pos.view_client or perms.pos.view_provider %}
           <li class="nav-item">
             <a
@@ -814,6 +858,17 @@
                             <a href="{% url 'catalogs:assurance_parameter_list' %}" class="nav-link">
                                 <i class="far fa-circle nav-icon"></i>
                                 <p>Parám. Aseguramiento</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
+                    {% if perms.catalogs.view_trap_ica or perms.catalogs.view_trap_copitarsia %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'catalogs:trap_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Trampas</p>
                             </a>
                         </li>
                     </ul>

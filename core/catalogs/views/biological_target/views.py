@@ -51,6 +51,11 @@ class BiologicalTargetCreateView(GroupPermissionMixin, CreateView):
         try:
             if action == 'add':
                 data = self.get_form().save()
+            elif action == 'get_category': 
+                from core.catalogs.models import BiologicalTargetCategory
+                cat_id = request.POST['id']
+                category = BiologicalTargetCategory.objects.get(pk=cat_id)
+                data = {'handle_traps': category.handle_traps}
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
@@ -83,6 +88,11 @@ class BiologicalTargetUpdateView(GroupPermissionMixin, UpdateView):
         try:
             if action == 'edit':
                 data = self.get_form().save()
+            elif action == 'get_category':
+                from core.catalogs.models import BiologicalTargetCategory
+                cat_id = request.POST['id']
+                category = BiologicalTargetCategory.objects.get(pk=cat_id)
+                data = {'handle_traps': category.handle_traps}
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:

@@ -72,9 +72,9 @@ var sale = {
             paginate: false,
             columns: [
                 {data: "id"},
-                {data: "short_name"},
-                {data: "stock"},
+                {data: "name"},
                 {data: "cant"},
+                {data: "dscto"},
                 {data: "pvp"},
                 {data: "total"},
             ],
@@ -88,23 +88,17 @@ var sale = {
                     }
                 },
                 {
-                    targets: [-4],
-                    class: 'text-center',
-                    render: function (data, type, row) {
-                        if (row.is_service) {
-                            return 'N/A';
-                        }
-                        if (data > 0) {
-                            return '<span class="badge bg-success rounded-pill">' + parseFloat(data).toLocaleString('es-CL') + '</span>';
-                        }
-                        return '<span class="badge bg-warning rounded-pill">' + parseFloat(data).toLocaleString('es-CL') + '</span>';
-                    }
-                },
-                {
                     targets: [-3],
                     class: 'text-center',
                     render: function (data, type, row) {
                         return '<input type="text" class="form-control" autocomplete="off" name="cant" value="' + row.cant + '">';
+                    }
+                },
+                {
+                    targets: [-4],
+                    class: 'text-center',
+                    render: function (data, type, row) {
+                        return '<input type="text" class="form-control" autocomplete="off" name="dscto_unitary" value="' + row.dscto_unitary + '">';
                     }
                 },
                 {

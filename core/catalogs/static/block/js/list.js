@@ -68,8 +68,9 @@ var block = {
 
                         let buttons = '';
 
+                        // CORRECCIÓN AQUÍ: Ajustado a 'structure/update/' para coincidir con tu urls.py
                         buttons +=
-                            '<a href="' + pathname + 'update/' + row.id + '/" ' +
+                            '<a href="' + pathname + 'structure/update/' + row.id + '/" ' +
                             'class="btn btn-warning btn-sm me-1">' +
                             '<i class="fas fa-edit"></i>' +
                             '</a>';

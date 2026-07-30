@@ -1,5 +1,7 @@
 from django.db import models
 from django_tenants.models import TenantMixin, DomainMixin
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 
 class Client(TenantMixin):
@@ -18,3 +20,18 @@ class Client(TenantMixin):
 
 class Domain(DomainMixin):
     pass
+
+# Este signal se dispara justo después de que se crea una nueva empresa (Client)
+@receiver(post_save, sender=Client)
+def create_default_domain(sender, instance, created, **kwargs):
+    if created:
+        # Asume que el dominio será 'schema_name.critera.online'
+        # Puedes cambiar 'critera.online' por tu dominio principal
+        domain_name = f"{instance.schema_name}.critera.online"
+        
+        # Crea el objeto Domain asociado al tenant recién creado
+        Domain.objects.create(
+            domain=domain_name, 
+            tenant=instance, 
+            is_primary=True
+        )

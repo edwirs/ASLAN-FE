@@ -1,245 +1,135 @@
 $(function () {
-
-    function getStructureData() {
-
-        return {
-            code: $('#id_code').val(),
-            name: $('#id_name').val(),
-            bays: parseInt($('#id_bay_quantity').val()),
-            beds: parseInt($('#id_bed_quantity').val()),
-            sections: parseInt($('#id_section_quantity').val()),
-            hasSides: $('#id_has_sides').is(':checked')
-        };
+    // Renderiza los cuadros como botones interactivos
+    function renderCuadros(naveNum, camaNum) {
+        let cuadros = '';
+        let totalSections = parseInt($('#id_section_quantity').val());
+        
+        for (let s = 1; s <= totalSections; s++) {
+            let ref = `${naveNum}-${camaNum}-${s}`;
+            cuadros += `
+                <button type="button" class="btn btn-sm btn-outline-secondary btn-section border rounded" 
+                        data-ref="${ref}" 
+                        style="flex: 1; font-size: 0.6rem; padding: 2px 0;">
+                    ${s}
+                </button>`;
+        }
+        return `<div class="d-flex w-100 gap-1">${cuadros}</div>`;
     }
 
-    function validateStructureData(data) {
+    function renderNave(naveNumero) {
+        let htmlCamas = '';
+        let totalCamas = parseInt($('#id_bed_quantity').val());
+        let camasPorLado = totalCamas / 2;
 
-        if (!data.code || !data.name) {
-
-            Swal.fire({
-                icon: 'warning',
-                title: 'Datos incompletos',
-                text: 'Ingrese el código y el nombre del bloque'
-            });
-
-            return false;
+        for (let i = 0; i < camasPorLado; i++) {
+            let impar = (i * 2) + 1;
+            let par = (i * 2) + 2;
+            
+            htmlCamas += `
+                <div class="row g-1 align-items-center mb-1">
+                    <div class="col-5">
+                        <div class="card border-primary">
+                            <div class="card-header py-0 bg-primary text-white text-center" style="font-size: 0.7rem;">Cama ${impar}</div>
+                            <div class="card-body p-1">${renderCuadros(naveNumero, impar)}</div>
+                        </div>
+                    </div>
+                    <div class="col-2 text-center p-0"><small class="text-muted" style="font-size: 0.6rem;">PASILLO</small></div>
+                    <div class="col-5">
+                        <div class="card border-secondary">
+                            <div class="card-header py-0 bg-secondary text-white text-center" style="font-size: 0.7rem;">Cama ${par}</div>
+                            <div class="card-body p-1">${renderCuadros(naveNumero, par)}</div>
+                        </div>
+                    </div>
+                </div>`;
         }
 
-        if (!data.bays || !data.beds || !data.sections) {
-
-            Swal.fire({
-                icon: 'warning',
-                title: 'Cantidades incompletas',
-                text: 'Ingrese naves, camas por nave y cuadros por cama'
-            });
-
-            return false;
-        }
-
-        if (data.bays < 1 || data.beds < 1 || data.sections < 1) {
-
-            Swal.fire({
-                icon: 'warning',
-                title: 'Cantidades inválidas',
-                text: 'Las cantidades deben ser mayores o iguales a 1'
-            });
-
-            return false;
-        }
-
-        return true;
+        return `
+            <div class="card shadow-sm border-0 mb-3 nave-box" id="nave_${naveNumero}">
+                <div class="card-header py-1 bg-white border-bottom border-primary text-primary text-center">
+                    <strong>Nave ${naveNumero}</strong>
+                </div>
+                <div class="card-body p-2 bg-light">${htmlCamas}</div>
+            </div>`;
     }
 
     $('.btnPreview').on('click', function () {
-
-        let data = getStructureData();
-
-        if (!validateStructureData(data)) {
-            return;
-        }
-
-        let html = '';
-        let totalBeds = data.bays * data.beds;
-        let totalSections = totalBeds * data.sections;
-
-        html += `
-            <div class="card shadow-sm">
-                <div class="card-header">
-                    Vista previa
-                </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-3 mb-2">
-                            <div class="alert alert-light border mb-0 py-2">
-                                <strong>${data.bays}</strong><br>
-                                Naves
-                            </div>
-                        </div>
-                        <div class="col-md-3 mb-2">
-                            <div class="alert alert-light border mb-0 py-2">
-                                <strong>${data.beds}</strong><br>
-                                Camas por nave
-                            </div>
-                        </div>
-                        <div class="col-md-3 mb-2">
-                            <div class="alert alert-light border mb-0 py-2">
-                                <strong>${data.sections}</strong><br>
-                                Cuadros por cama
-                            </div>
-                        </div>
-                        <div class="col-md-3 mb-2">
-                            <div class="alert alert-light border mb-0 py-2">
-                                <strong>${totalSections}</strong><br>
-                                Cuadros totales
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-        `;
-
-        let middle = Math.floor(data.bays / 2);
-
-        if (data.hasSides) {
-
-            html += `
-                <div class="col-md-6">
-
-                    <h5>Lado A</h5>
-            `;
-
-            for (let i = 1; i <= middle; i++) {
-
-                html += `
-                    <div class="alert alert-success py-2">
-                        <strong>Nave ${i}</strong>
-                        <span class="float-end">${data.beds} camas / ${data.beds * data.sections} cuadros</span>
-                    </div>
-                `;
-            }
-
-            html += `
-                </div>
-                <div class="col-md-6">
-
-                    <h5>Lado B</h5>
-            `;
-
-            for (let i = middle + 1; i <= data.bays; i++) {
-
-                html += `
-                    <div class="alert alert-info py-2">
-                        <strong>Nave ${i}</strong>
-                        <span class="float-end">${data.beds} camas / ${data.beds * data.sections} cuadros</span>
-                    </div>
-                `;
-            }
-
-            html += `
-                </div>
-            `;
-
-        } else {
-
-            html += `
-                <div class="col-md-12">
-            `;
-
-            for (let i = 1; i <= data.bays; i++) {
-
-                html += `
-                    <div class="alert alert-secondary py-2">
-                        <strong>Nave ${i}</strong>
-                        <span class="float-end">${data.beds} camas / ${data.beds * data.sections} cuadros</span>
-                    </div>
-                `;
-            }
-
-            html += `
-                </div>
-            `;
-        }
-
-        html += `
-                    </div>
-
-                    <hr>
-
-                    <button
-                        type="button"
-                        class="btn btn-success btnSave">
-
-                        <i class="fas fa-save"></i>
-
-                        Crear estructura
-
-                    </button>
-
-                </div>
+        let bays = parseInt($('#id_bay_quantity').val());
+        let html = `
+            <div class="container-fluid text-center my-3">
+                <button type="button" class="btn btn-outline-success btn-monitor-all-global">
+                    <i class="fas fa-check-double"></i> Monitorear TODOS los cuadros
+                </button>
             </div>
-        `;
-
+            <div class="d-flex flex-wrap">`;
+        
+        for (let i = 1; i <= bays; i++) {
+            html += `<div style="flex: 1 1 350px; padding: 5px;">${renderNave(i)}</div>`;
+        }
+        
+        html += `</div><hr><button type="button" class="btn btn-success btnSaveAll"><i class="fas fa-save"></i> Guardar Bloque Completo</button>`;
         $('#preview').html(html);
 
+        // Si estamos en modo edición, marcamos los cuadros guardados en la BD
+        if (typeof IS_EDIT_MODE !== 'undefined' && IS_EDIT_MODE) {
+            setTimeout(function() {
+                if (typeof INITIAL_MONITORED !== 'undefined') {
+                    INITIAL_MONITORED.forEach(function(ref) {
+                        let btn = $(`.btn-section[data-ref="${ref}"]`);
+                        if (btn.length > 0) {
+                            btn.removeClass('btn-outline-secondary').addClass('btn-success');
+                        }
+                    });
+                }
+            }, 100);
+        }
     });
 
-    $(document).on('click', '.btnSave', function () {
+    $(document).on('click', '.btn-section', function () {
+        $(this).toggleClass('btn-outline-secondary btn-success');
+    });
 
-        let data = getStructureData();
+    $(document).on('click', '.btn-monitor-all-global', function () {
+        $('.btn-section').removeClass('btn-outline-secondary').addClass('btn-success');
+        Swal.fire({ icon: 'success', title: 'Seleccionado', text: 'Todos los cuadros marcados', timer: 1000 });
+    });
 
-        if (!validateStructureData(data)) {
-            return;
-        }
+    $(document).on('click', '.btnSaveAll', function () {
+        let selected = [];
+        $('.btn-section.btn-success').each(function() {
+            selected.push($(this).data('ref'));
+        });
+        
+        let postData = {
+            'action': 'create',
+            'code': $('#id_code').val(),
+            'name': $('#id_name').val(),
+            'bay_quantity': $('#id_bay_quantity').val(),
+            'bed_quantity': $('#id_bed_quantity').val(),
+            'section_quantity': $('#id_section_quantity').val(),
+            'has_sides': $('#id_has_sides').is(':checked'),
+            'selected_sections[]': selected,
+            'csrfmiddlewaretoken': $('input[name="csrfmiddlewaretoken"]').val()
+        };
 
         $.ajax({
-
             url: window.location.pathname,
-
             type: 'POST',
-
-            headers: {
-                'X-CSRFToken': csrftoken
-            },
-
-            data: {
-
-                action: 'create',
-
-                code: data.code,
-
-                name: data.name,
-
-                has_sides: data.hasSides,
-
-                bay_quantity: data.bays,
-
-                bed_quantity: data.beds,
-
-                section_quantity: data.sections
-            },
-
-            success: function (response) {
-
-                if (response.error) {
-
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'No se pudo crear',
-                        text: response.error
+            data: postData,
+            success: function(response) {
+                Swal.fire('Éxito', 'Estructura guardada correctamente', 'success')
+                    .then(() => { 
+                        window.location.href = BLOCK_LIST_URL; 
                     });
-
-                    return;
-                }
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Estructura creada'
-                });
-
-                location.reload();
+            },
+            error: function(xhr) {
+                console.error("Error del servidor:", xhr.responseText);
+                Swal.fire('Error', 'No se pudo guardar. Revisa los campos obligatorios.', 'error');
             }
         });
-
     });
 
+    // Carga automática al abrir en modo edición
+    if (typeof IS_EDIT_MODE !== 'undefined' && IS_EDIT_MODE) {
+        $('.btnPreview').trigger('click');
+    }
 });

@@ -19,10 +19,24 @@ var category = {
                 {data: "id"},
                 {data: "name"},
                 {data: "description"},
-                {data: "id"},
+                {data: "handle_traps"}, // Columna 3
+                {data: "id"},           // Columna 4 (Acciones)
             ],
             columnDefs: [
                 {
+                    // Renderizado para la columna handle_traps (índice 3)
+                    targets: [3],
+                    class: 'text-center',
+                    render: function (data, type, row) {
+                        if (data) {
+                            return '<span class="badge" style="background-color: #28a745; color: white; border-radius: 50px; padding: 5px 12px;">SI</span>';
+                        } else {
+                            return '<span class="badge" style="background-color: #fd7e14; color: white; border-radius: 50px; padding: 5px 12px;">NO</span>';
+                        }
+                    }
+                },
+                {
+                    // Renderizado para acciones (índice 4)
                     targets: [-1],
                     class: 'text-center',
                     render: function (data, type, row) {

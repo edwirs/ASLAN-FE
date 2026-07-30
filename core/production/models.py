@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 from django.utils import timezone
 
 from core.user.models import User
-from core.catalogs.models import BiologicalTarget, Block, BlockBay, Bed, BedSection, SeverityGrade, AssuranceParameter, Block, BlockBay, Bed, BedSection
+from core.catalogs.models import BiologicalTarget, Block, BlockBay, Bed, BedSection, SeverityGrade, AssuranceParameter, Block, BlockBay, Bed, BedSection, TrapICA, TrapCopitarsia, TrapIn, TrapOut
 
 from config import settings
 
@@ -326,4 +326,137 @@ class AssuranceDetail(models.Model):
         item['bed_section'] = str(self.bed_section) if self.bed_section else 'N/A'
         # get_third_display es un método automático de Django para campos con 'choices'
         item['third_display'] = self.get_third_display() if self.third else ''
+        return item
+
+class ReadingICA(models.Model):
+    trap = models.ForeignKey(TrapICA, on_delete=models.CASCADE, verbose_name="Trampa ICA")
+    date_reading = models.DateField(default=datetime.now, verbose_name="Fecha de lectura")
+    quantity = models.IntegerField(default=0, verbose_name="Cantidad")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+
+    class Meta:
+        verbose_name = "Registro ICA"
+        verbose_name_plural = "Registros ICA"
+        ordering = ['-date_reading']
+        default_permissions = ()
+        permissions = (
+            ('view_reading_ica', 'Consultar registros ICA'),
+            ('add_reading_ica', 'Crear registros ICA'),
+            ('change_reading_ica', 'Editar registros ICA'),
+            ('delete_reading_ica', 'Eliminar registros ICA'),
+        )
+
+    def __str__(self):
+        return f"{self.trap.name} - {self.date_reading}"
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        item['trap'] = self.trap.toJSON()
+        item['date_reading'] = self.date_reading.strftime('%Y-%m-%d')
+        return item
+
+class ReadingCopitarsia(models.Model):
+    trap = models.ForeignKey(TrapCopitarsia, on_delete=models.CASCADE, verbose_name="Trampa Copitarsia")
+    date_reading = models.DateField(default=datetime.now, verbose_name="Fecha de lectura")
+    quantity = models.IntegerField(default=0, verbose_name="Cantidad")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+
+    class Meta:
+        verbose_name = "Registro Copitarsia"
+        verbose_name_plural = "Registros Copitarsia"
+        ordering = ['-date_reading']
+        default_permissions = ()
+        permissions = (
+            ('view_reading_copitarsia', 'Consultar registros Copitarsia'),
+            ('add_reading_copitarsia', 'Crear registros Copitarsia'),
+            ('change_reading_copitarsia', 'Editar registros Copitarsia'),
+            ('delete_reading_copitarsia', 'Eliminar registros Copitarsia'),
+        )
+
+    def __str__(self):
+        return f"{self.trap.name} - {self.date_reading}"
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        item['trap'] = self.trap.toJSON()
+        item['date_reading'] = self.date_reading.strftime('%Y-%m-%d')
+        return item
+
+class ReadingInternalTrap(models.Model):
+    trap_in = models.ForeignKey(TrapIn, on_delete=models.PROTECT, verbose_name="Trampa Interna")
+    date_reading = models.DateField(verbose_name="Fecha de lectura")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+
+    class Meta:
+        verbose_name = "Lectura Trampa Interna"
+        verbose_name_plural = "Lecturas Trampas Internas"
+        default_permissions = ()
+        permissions = (
+            ('view_reading_internal_trap', 'Consultar lecturas trampas internas'),
+            ('add_reading_internal_trap', 'Crear lecturas trampas internas'),
+        )
+
+    def __str__(self):
+        return f"{self.trap_in.name} - {self.date_reading}"
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        item['trap_in'] = self.trap_in.toJSON()
+        item['date_reading'] = self.date_reading.strftime('%Y-%m-%d')
+        item['block'] = self.trap_in.block.toJSON() 
+        item['name'] = self.trap_in.name
+        return item
+
+class ReadingInternalTrapDetail(models.Model):
+    reading = models.ForeignKey(ReadingInternalTrap, on_delete=models.CASCADE, related_name='details')
+    biological_target = models.ForeignKey(BiologicalTarget, on_delete=models.PROTECT, verbose_name="Blanco Biológico")
+    quantity = models.IntegerField(default=0, verbose_name="Cantidad")
+
+    class Meta:
+        verbose_name = "Detalle de Lectura"
+        verbose_name_plural = "Detalles de Lecturas"
+        default_permissions = ()
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        item['biological_target'] = self.biological_target.toJSON()
+        return item
+
+class ReadingExternalTrap(models.Model):
+    trap_out = models.ForeignKey(TrapOut, on_delete=models.PROTECT, verbose_name="Trampa Externa")
+    date_reading = models.DateField(verbose_name="Fecha de lectura")
+    observation = models.TextField(blank=True, null=True, verbose_name="Observación")
+
+    class Meta:
+        verbose_name = "Lectura Trampa Externa"
+        verbose_name_plural = "Lecturas Trampas Externas"
+        default_permissions = ()
+        permissions = (
+            ('view_reading_external_trap', 'Consultar lecturas trampas externas'),
+            ('add_reading_external_trap', 'Crear lecturas trampas externas'),
+        )
+
+    def __str__(self):
+        return f"{self.trap_in.name} - {self.date_reading}"
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        item['trap_out'] = self.trap_out.toJSON()
+        item['date_reading'] = self.date_reading.strftime('%Y-%m-%d')
+        item['name'] = self.trap_out.name
+        return item
+
+class ReadingExternalTrapDetail(models.Model):
+    reading = models.ForeignKey(ReadingExternalTrap, on_delete=models.CASCADE, related_name='details')
+    biological_target = models.ForeignKey(BiologicalTarget, on_delete=models.PROTECT, verbose_name="Blanco Biológico")
+    quantity = models.IntegerField(default=0, verbose_name="Cantidad")
+
+    class Meta:
+        verbose_name = "Detalle de Lectura"
+        verbose_name_plural = "Detalles de Lecturas"
+        default_permissions = ()
+
+    def toJSON(self):
+        item = model_to_dict(self)
+        item['biological_target'] = self.biological_target.toJSON()
         return item

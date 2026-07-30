@@ -1,4 +1,7 @@
 {% extends 'form.html' %}
+{% block body_class %}
+sidebar-collapse
+{% endblock %}
 {% load widget_tweaks %}
 {% load static %}
 {% block assets_form %}
@@ -19,45 +22,78 @@
 {% endblock %}
 
 {% block form_fields %}
-<div class="row mb-4">
-    <div class="col-12 col-md-6 col-lg-4 mb-3">
-        <label class="form-label fw-bold">{{ form.date_joined.label }}:</label>
-        {{ form.date_joined }}
-    </div>
-    <div class="col-12 col-md-6 col-lg-8 mb-3">
-        <label class="form-label fw-bold">{{ form.client.label }}:</label>
-        <div class="input-group">
-            {{ form.client }}
-            <button class="btn btn-success btnAddClient" type="button">
-                <i class="fas fa-plus"></i> Crear cliente
-            </button>
+<div class="row">
+<div class="mb-4 card border p-3">
+        <div class="row">
+            <div class="col-12 col-lg-4 mb-3">
+                <label class="form-label fw-bold">Tipo Documento:</label>
+                {{ form.date_joined }}
+            </div>
         </div>
     </div>
-</div>
 
-<div class="row">
+    <div class="mb-4 card border p-3">
+        <div class="row">
+            <div class="col-12 col-lg-4 mb-3">
+                <label class="form-label fw-bold">{{ form.date_joined.label }}:</label>
+                {{ form.date_joined }}
+            </div>
+            <div class="col-12 col-lg-4 mb-3">
+                <label class="form-label fw-bold">Rango de numeración:</label>
+                {{ form.date_joined }}
+            </div>
+            <div class="col-12 col-lg-4 mb-3">
+                <label class="form-label fw-bold">Consecutivo factura:</label>
+                {{ form.date_joined }}
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-4 card border p-3">
+        <div class="row">
+            <!-- Selección del Cliente (Ocupa espacio central) -->
+            <div class="col-lg-6 mb-3">
+                <label class="form-label fw-bold">{{ form.client.label }}:</label>
+                <div class="input-group">
+                    <button class="btn btn-success btnAddClient" type="button" title="Crear cliente">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    {{ form.client }}
+                </div>
+            </div>
+
+            <!-- Lista desplegable de correos (En la misma fila, alineado al lado del cliente) -->
+            <div class="col-lg-6 mb-3">
+                <label class="form-label fw-bold">Correo de Envío (Facturación Electrónica):</label>
+                <select id="client_email_select" name="client_email_target" class="form-control select2" style="width: 100%;">
+                    <option value="">---------</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
     <div class="col-12 card border p-3 mb-4">
         <div class="mb-3">
-            <label class="form-label fw-bold">Búsqueda de productos:</label>
+            <label class="form-label fw-bold">Búsqueda de productos o servicios:</label>
             <div class="row g-2 align-items-stretch">
                 <!-- Input de búsqueda -->
                 <div class="col-12 col-md-6">
-                    <input type="text" id="search_product" class="form-control form-control-lg h-100" autocomplete="off" name="search_product" placeholder="Ingrese el codigo de un producto">
+                    <input type="text" id="search_product" class="form-control form-control-lg h-100" autocomplete="off" name="search_product" placeholder="Ingrese el codigo de un producto o servicio">
 
                 </div>
 
                 <!-- Botones -->
-                <div class="col-12 col-md-6">
+                <div class="col-12 col-md-3">
                     <div class="d-grid d-md-flex h-100 align-items-stretch">
-                        <button class="btnSearchProducts btn btn-success flex-fill h-100 rounded-5 rounded-start" type="button">
-                            <i class="fas fa-search"></i> Buscar productos
-                        </button>
-                        <button class="btnClearProducts btn btn-warning flex-fill h-100 rounded-0" type="button">
+                        <!--  <button class="btnSearchProducts btn btn-success flex-fill h-100 rounded-5 rounded-start" type="button">
+                            <i class="fas fa-search"></i> Buscar productos/servicios
+                        </button> -->
+                        <!-- <button class="btnClearProducts btn btn-warning flex-fill h-100 rounded-0" type="button">
                             <i class="fas fa-times"></i> Limpiar búsqueda
-                        </button>
-                        <button class="btnRemoveAllProducts btn btn-danger flex-fill h-100 rounded-5 rounded-end" type="button">
+                        </button> -->
+                        <!-- <button class="btnRemoveAllProducts btn btn-danger flex-fill h-100 rounded-5 rounded-end" type="button">
                             <i class="fas fa-trash-alt"></i> Borrar todo
-                        </button>
+                        </button> -->
                     </div>
                 </div>
             </div>
@@ -68,11 +104,11 @@
             <table class="table table-bordered" id="tblProducts">
                 <thead>
                 <tr>
-                    <th style="width: 5%;">Eliminar</th>
-                    <th style="width: 25%;">Producto</th>
-                    <th style="width: 5%;">Stock</th>
-                    <th style="width: 20%;">Cantidad</th>
-                    <th style="width: 15%;">P./Unitario</th>
+                    <th style="width: 5%;"></th>
+                    <th style="width: 30%;">Producto</th>
+                    <th style="width: 10%;">Cantidad</th>
+                    <th style="width: 10%;">Descuento %</th>
+                    <th style="width: 10%;">P./Unitario</th>
                     <th style="width: 10%;">Total</th>
                 </tr>
                 </thead>
@@ -96,20 +132,24 @@
                 <label class="form-label fw-bold w-100">{{ form.total_iva.label|upper }}</label>
                 {{ form.total_iva }}
             </div>
-            <div class="col-12 col-md mb-2">
+            <!--<div class="col-12 col-md mb-2">
                 <label class="form-label fw-bold w-100">{{ form.dscto.label|upper }}</label>
                 {{ form.dscto }}
-            </div>
+            </div>-->
             <div class="col-12 col-md mb-2">
                 <label class="form-label fw-bold w-100">{{ form.total_dscto.label|upper }}</label>
                 {{ form.total_dscto }}
+            </div>
+            <div class="col-12 col-md mb-2">
+            <label class="form-label fw-bold">{{ form.total.label|upper }}</label>
+                {{ form.total }}
             </div>
         </div>
     </div>
 
     <!-- Totales Finales -->
     <div class="col-12 col-lg-4 card border p-3 ms-auto mb-4">
-        <div class="mb-3">
+        <div class="mb-3 d-none">
             <label class="form-label fw-bold">{{ form.service_type.label }}:</label>
             {{ form.service_type }}
         </div>
@@ -119,13 +159,13 @@
                 <label class="form-label fw-bold">{{ form.paymentmethod.label }}:</label>
                 {{ form.paymentmethod }}
             </div>
-            <div class="col">
+            <div class="col d-none">
                 <label class="form-label fw-bold">{{ form.transfermethods.label }}:</label>
                 {{ form.transfermethods }}
             </div>
         </div>
 
-        <div class="row mb-3">
+        <div class="row mb-3 d-none">
             <div class="col transfermethods">
                 <label class="form-label fw-bold">{{ form.typemethods.label }}:</label>
                 {{ form.typemethods }}
@@ -136,12 +176,7 @@
             </div>
         </div>
 
-        
-        <div class="mb-3">
-            <label class="form-label fw-bold">{{ form.total.label|upper }}</label>
-            {{ form.total }}
-        </div>
-        <div class="row mb-3">
+        <div class="row mb-3 d-none">
             <div class="col">
                 <label class="form-label fw-bold">{{ form.cash.label }}:</label>
                 {{ form.cash }}
@@ -161,7 +196,7 @@
                 {{ form.daviplata_value }}
             </div>
         </div>
-        <div class="mb-3">
+        <div class="mb-3 d-none">
             <label class="form-label fw-bold">{{ form.change.label }}:</label>
             {{ form.change }}
         </div>
@@ -172,7 +207,7 @@
 
 {% block buttons %}
     <button type="submit" class="btn btn-primary">
-        <i class="fas fa-file-invoice-dollar"></i> Generar Venta
+        <i class="fas fa-file-invoice-dollar"></i> Guardar y Enviar
     </button>
     <a href="{{ list_url }}" class="btn btn-danger">
         <i class="fas fa-times"></i> Cancelar

@@ -69,3 +69,13 @@ AUTORIZATION_DISCOUNT = (
     ('diego', 'Diego Barragan'),
     ('steven', 'Steven Monroy'),
 )
+
+PERSON_TYPE = (
+    ('natural', 'Persona Natural'),
+    ('juridica', 'Persona Jurídica'),
+)
+
+TAX_RESPONSIBILITY = (
+    ('no_responsable', 'No responsable de IVA'),
+    ('responsable', 'Responsable de IVA'),
+)

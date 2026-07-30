@@ -72,65 +72,79 @@
 
             <div class="bed-horizontal-scroll">
                 <div class="bed-container-row">
-                    
                     {% for section in matrix_data %}
                         <div class="section-column-card">
-                            <div class="section-column-header">
-                                Cuadro {{ section.number }}
-                            </div>
+                            <div class="section-column-header">Cuadro {{ section.number }}</div>
                             
-                            <div class="thirds-stack">
-                                <div class="third-cell high-zone">
-                                    <div class="target-pills-container">
-                                        {% for target in section.high %}
-                                            <div class="fito-pill-group">
-                                                <span class="badge-fito">{{ target.name }}</span>
-                                                {% if target.severity %}
-                                                    <span class="badge-severity-view">{{ target.severity }}</span>
+                            {% if section.is_configured %}
+                                <div class="thirds-stack">
+    
+                                    <!-- TERCIO ALTO -->
+                                    <div class="third-cell high-zone">
+                                        <div class="target-pills-container">
+                                            {% for item in section.high %}
+                                                {% if item.name|lower == "limpio" %}
+                                                    <span class="badge-clean">
+                                                        <i class="fas fa-star" style="margin-right: 5px;"></i> Limpio
+                                                    </span>
+                                                {% else %}
+                                                    <div class="fito-pill-group">
+                                                        <span class="badge-fito">{{ item.name }}</span>
+                                                        <span class="badge-severity-view">{{ item.severity|default:'N/A' }}</span>
+                                                    </div>
                                                 {% endif %}
-                                            </div>
-                                        {% empty %}
-                                            <span class="badge-clean"><i class="fas fa-star"></i> Limpio</span>
-                                        {% endfor %}
+                                            {% endfor %}
+                                        </div>
+                                        <span class="zone-tag">Alto</span>
                                     </div>
-                                    <span class="zone-tag">Alto</span>
-                                </div>
 
-                                <div class="third-cell middle-zone">
-                                    <div class="target-pills-container">
-                                        {% for target in section.middle %}
-                                            <div class="fito-pill-group">
-                                                <span class="badge-fito">{{ target.name }}</span>
-                                                {% if target.severity %}
-                                                    <span class="badge-severity-view">{{ target.severity }}</span>
+                                    <!-- TERCIO MEDIO -->
+                                    <div class="third-cell middle-zone">
+                                        <div class="target-pills-container">
+                                            {% for item in section.middle %}
+                                                {% if item.name|lower == "limpio" %}
+                                                    <span class="badge-clean">
+                                                        <i class="fas fa-star" style="margin-right: 5px;"></i> Limpio
+                                                    </span>
+                                                {% else %}
+                                                    <div class="fito-pill-group">
+                                                        <span class="badge-fito">{{ item.name }}</span>
+                                                        <span class="badge-severity-view">{{ item.severity|default:'N/A' }}</span>
+                                                    </div>
                                                 {% endif %}
-                                            </div>
-                                        {% empty %}
-                                            <span class="badge-clean"><i class="fas fa-star"></i> Limpio</span>
-                                        {% endfor %}
+                                            {% endfor %}
+                                        </div>
+                                        <span class="zone-tag">Medio</span>
                                     </div>
-                                    <span class="zone-tag">Medio</span>
-                                </div>
 
-                                <div class="third-cell low-zone">
-                                    <div class="target-pills-container">
-                                        {% for target in section.low %}
-                                            <div class="fito-pill-group">
-                                                <span class="badge-fito">{{ target.name }}</span>
-                                                {% if target.severity %}
-                                                    <span class="badge-severity-view">{{ target.severity }}</span>
+                                    <!-- TERCIO BAJO -->
+                                    <div class="third-cell low-zone">
+                                        <div class="target-pills-container">
+                                            {% for item in section.low %}
+                                                {% if item.name|lower == "limpio" %}
+                                                    <span class="badge-clean">
+                                                        <i class="fas fa-star" style="margin-right: 5px;"></i> Limpio
+                                                    </span>
+                                                {% else %}
+                                                    <div class="fito-pill-group">
+                                                        <span class="badge-fito">{{ item.name }}</span>
+                                                        <span class="badge-severity-view">{{ item.severity|default:'N/A' }}</span>
+                                                    </div>
                                                 {% endif %}
-                                            </div>
-                                        {% empty %}
-                                            <span class="badge-clean"><i class="fas fa-star"></i> Limpio</span>
-                                        {% endfor %}
+                                            {% endfor %}
+                                        </div>
+                                        <span class="zone-tag">Bajo</span>
                                     </div>
-                                    <span class="zone-tag">Bajo</span>
+
                                 </div>
-                            </div>
+                            {% else %}
+                                <!-- Cuadro no configurado -->
+                                <div class="text-center p-4" style="color: #94a3b8; font-style: italic;">
+                                    <small>No configurado</small>
+                                </div>
+                            {% endif %}
                         </div>
                     {% endfor %}
-
                 </div>
             </div>
         </div>

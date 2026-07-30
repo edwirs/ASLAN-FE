@@ -21,6 +21,8 @@ from core.pos.choices import PERIODO_NOMINA
 from core.pos.choices import STATUS_CHOICES
 from core.pos.choices import EMPLOYEE_TRANSACTION_CHOICES
 from core.pos.choices import AUTORIZATION_DISCOUNT
+from core.pos.choices import PERSON_TYPE
+from core.pos.choices import TAX_RESPONSIBILITY
 from core.user.models import User
 
 class Category(models.Model):
@@ -126,22 +128,60 @@ class Company(models.Model):
             ('view_company', 'Can view Empresa'),
         )
 
+class DocumentType(models.Model):
+    name = models.CharField(max_length=100, verbose_name='Nombre')
+    abbreviation = models.CharField(max_length=10, unique=True, verbose_name='Acrónimo')
+    code = models.CharField(max_length=10, unique=True, verbose_name='Código DIAN')
+    is_active = models.BooleanField(default=True, verbose_name='Estado')
+
+    def toJSON(self):
+        item = {
+            'id': self.id,
+            'name': self.name,
+            'abbreviation': self.abbreviation,
+            'code': self.code,
+            'is_active': self.is_active
+        }
+        return item
+
+    def __str__(self):
+        return f"{self.name} ({self.abbreviation})"
+
+    class Meta:
+        verbose_name = 'Tipo de Documento'
+        verbose_name_plural = 'Tipos de Documentos'
+        ordering = ['id']
 
 class Client(models.Model):
-    names = models.CharField(max_length=150, verbose_name='Nombre')
-    dni = models.CharField(max_length=13, unique=True, verbose_name='Número de cedula')
-    gender = models.CharField(max_length=50, choices=GENDER, default=GENDER[0][0], verbose_name='Genero')
+    document_type = models.ForeignKey(DocumentType, on_delete=models.PROTECT, verbose_name='Tipo de documento')
+    dni = models.CharField(max_length=20, unique=True, verbose_name='Número de documento')
+    dv = models.CharField(max_length=1, null=True, blank=True, verbose_name='Dígito de verificación')
+    
+    person_type = models.CharField(max_length=20, choices=PERSON_TYPE, default=PERSON_TYPE[0][0], verbose_name='Tipo de persona')
+    tax_responsibility = models.CharField(max_length=30, choices=TAX_RESPONSIBILITY, default=TAX_RESPONSIBILITY[0][0], verbose_name='Responsabilidad tributaria')
+    
+    names = models.CharField(max_length=150, verbose_name='Nombre o Razón social')
+    commercial_name = models.CharField(max_length=150, null=True, blank=True, verbose_name='Nombre comercial')
+    
+    gender = models.CharField(max_length=50, choices=GENDER, default=GENDER[0][0], verbose_name='Género')
+    birthdate = models.DateField(default=datetime.now, verbose_name='Fecha de nacimiento')
+    
+    country = models.CharField(max_length=100, default='Colombia', verbose_name='País')
+    municipality = models.CharField(max_length=100, null=True, blank=True, verbose_name='Municipio / Ciudad')
+    address = models.CharField(max_length=500, null=True, blank=True, verbose_name='Dirección')
+    
     mobile = models.CharField(max_length=10, null=True, blank=True, verbose_name='Teléfono')
     email = models.CharField(max_length=50, null=True, blank=True, verbose_name='Email')
-    birthdate = models.DateField(default=datetime.now, verbose_name='Fecha de nacimiento')
-    address = models.CharField(max_length=500, null=True, blank=True, verbose_name='Dirección')
     is_active = models.BooleanField(default=True, verbose_name='Estado')
 
     def __str__(self):
         return self.get_full_name()
 
     def get_full_name(self):
-        return f'{self.names} ({self.dni})'
+        doc_abbr = self.document_type.abbreviation if self.document_type else ''
+        if self.dv:
+            return f'{self.names} - {doc_abbr}: {self.dni}-{self.dv}'
+        return f'{self.names} - {doc_abbr}: {self.dni}'
 
     def birthdate_format(self):
         return self.birthdate.strftime('%Y-%m-%d')
@@ -149,6 +189,9 @@ class Client(models.Model):
     def toJSON(self):
         item = model_to_dict(self)
         item['text'] = self.get_full_name()
+        item['document_type'] = self.document_type.toJSON() if self.document_type else None
+        item['person_type'] = {'id': self.person_type, 'name': self.get_person_type_display()}
+        item['tax_responsibility'] = {'id': self.tax_responsibility, 'name': self.get_tax_responsibility_display()}
         item['gender'] = {'id': self.gender, 'name': self.get_gender_display()}
         item['birthdate'] = self.birthdate.strftime('%Y-%m-%d')
         return item
@@ -156,6 +199,28 @@ class Client(models.Model):
     class Meta:
         verbose_name = 'Cliente'
         verbose_name_plural = 'Clientes'
+        ordering = ['id']
+        default_permissions = ()
+        permissions = (
+            ('view_client', 'Ver Cliente'),
+            ('add_client', 'Agregar Cliente'),
+            ('change_client', 'Editar Cliente'),
+            ('delete_client', 'Eliminar Cliente'),
+        )
+
+class ClientContact(models.Model):
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contacts', verbose_name="Cliente")
+    names = models.CharField(max_length=150, verbose_name="Nombres y Apellidos")
+    email = models.EmailField(verbose_name="Correo electrónico")
+    position = models.CharField(max_length=100, blank=True, null=True, verbose_name="Cargo")
+    phone = models.CharField(max_length=20, blank=True, null=True, verbose_name="Teléfono")
+
+    def __str__(self):
+        return f"{self.names} ({self.client.names})"
+
+    class Meta:
+        verbose_name = "Contacto de Cliente"
+        verbose_name_plural = "Contactos de Clientes"
 
 class Provider(models.Model):
     names = models.CharField(max_length=150, verbose_name='Nombre')
