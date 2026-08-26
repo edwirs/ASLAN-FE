@@ -49,10 +49,11 @@ var sale = {
         var dscto_global = parseFloat($('input[name="dscto"]').val());
         this.detail.dscto = isNaN(dscto_global) ? 0.00 : dscto_global;
 
-        this.detail.total_dscto = this.detail.subtotal * (this.detail.dscto / 100);
-        this.detail.total_iva = this.detail.products.filter(value => value.with_tax).reduce((a, b) => a + (b.total_iva || 0), 0);
-        this.detail.total = this.detail.subtotal - this.detail.total_dscto;
-        this.detail.subtotal_12_sin_iva = this.detail.subtotal_12 - this.detail.total_iva;
+        var globalDiscountRate = this.detail.dscto / 100;
+        this.detail.total_dscto = this.detail.subtotal * globalDiscountRate;
+        this.detail.total_iva = this.detail.products.filter(value => value.with_tax).reduce((a, b) => a + (b.total_iva || 0), 0) * (1 - globalDiscountRate);
+        this.detail.subtotal_12_sin_iva = this.detail.subtotal_12 * (1 - globalDiscountRate);
+        this.detail.total = (this.detail.subtotal - this.detail.total_dscto) + this.detail.total_iva;
 
         $('input[name="subtotal_0"]').val(this.detail.subtotal_0.toFixed(2));
         $('input[name="subtotal_12"]').val(this.detail.subtotal_12.toFixed(2));
@@ -151,6 +152,19 @@ var sale = {
 };
 
 $(function () {
+    // --- LLENADO DINÁMICO DE FACTURACIÓN ELECTRÓNICA (FACTUS) ---
+    const rangeInput = $('input[name="numbering_range"]');
+    const consecutiveInput = $('input[name="consecutive"]');
+
+    if (rangeInput.length && typeof FACTUS_RANGE_DISPLAY !== 'undefined') {
+        rangeInput.val(FACTUS_RANGE_DISPLAY);
+        rangeInput.attr('readonly', true);
+    }
+
+    if (consecutiveInput.length && typeof FACTUS_CURRENT_CONSECUTIVE !== 'undefined') {
+        consecutiveInput.val(FACTUS_CURRENT_CONSECUTIVE);
+        consecutiveInput.attr('readonly', true);
+    }
     select_client = $('select[name="client"]');
     input_cash = $('input[name="cash"]');
     input_change = $('input[name="change"]');
@@ -331,18 +345,45 @@ $(function () {
     });
 
     expiration_date.parent().hide(); 
-    
+
+    const templatesElement = document.getElementById('observation-templates-data');
+    const templates = templatesElement ? JSON.parse(templatesElement.textContent) : {};
+    const $description = $('#id_description');
+
+    function getFutureDate() {
+        let date = new Date();
+        date.setDate(date.getDate() + 15);
+        let year = date.getFullYear();
+        let month = String(date.getMonth() + 1).padStart(2, '0');
+        let day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
     select_typemethods.on('change', function(){
         const selectedValue = $(this).val();
         if (selectedValue === 'credit') {
             expiration_date.parent().show();
+            expiration_date.attr('required', true);
             input_cash.val('0').trigger('change');
             input_change.val('0').trigger('change');
-            $('input[name="total"]').val('0').trigger('change');
+
+            if (!expiration_date.val()) {
+                expiration_date.val(getFutureDate());
+            }
+            
+            if (templates['credito'] && (!$description.val() || $description.val() === templates['contado'])) {
+                $description.val(templates['credito']);
+            }
         } else {
             expiration_date.parent().hide();
+            expiration_date.prop('required', false).val('');
+
+            if (templates['contado'] && (!$description.val() || $description.val() === templates['credito'])) {
+                $description.val(templates['contado']);
+            }
         }
     }); 
+    select_typemethods.trigger('change');
     
     select_service_type.on('change', function(){
         const selectedValue = $(this).val();
@@ -710,9 +751,31 @@ $(function () {
         if (parseFloat(input_change.val()) < 0.00) {
             return message_error('El efectivo debe ser mayor o igual al total de la venta');
         }
+        if (select_typemethods.val() === 'credit') {
+            var dueDate = expiration_date.val();
+            var today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (!dueDate || new Date(dueDate + 'T00:00:00') <= today) {
+                return message_error('Para pagos a crédito, la fecha de vencimiento debe ser posterior a hoy');
+            }
+        }
         var form = $(this)[0];
         var params = new FormData(form);
         params.append('products', JSON.stringify(sale.detail.products));
+
+        // Sincronizar DataTransfer al input del DOM por seguridad
+        var fileInputDom = document.getElementById('form-file-multi');
+        if (fileInputDom && pdfDataTransfer.files.length > 0) {
+            fileInputDom.files = pdfDataTransfer.files;
+        }
+
+        // Asegurar el envío usando 'pdf_files'
+        if (pdfDataTransfer.files && pdfDataTransfer.files.length > 0) {
+            params.delete('pdf_files'); // Limpiamos para evitar duplicados
+            for (var i = 0; i < pdfDataTransfer.files.length; i++) {
+                params.append('pdf_files', pdfDataTransfer.files[i]); 
+            }
+        }
         var url_refresh = $(this).attr('data-url');
         var args = {
             'params': params,
@@ -871,3 +934,195 @@ function clearAllPdfs(event) {
     if (input) input.value = '';
     syncPdfInputAndUI();
 }
+
+
+// --- ACCIÓN DE PREVISUALIZACIÓN DE FACTURA (ESTILO FACTUS / BOOTSTRAP 5) ---
+    $('#btnPreviewInvoice').on('click', function (e) {
+        e.preventDefault();
+
+        if (sale.detail.products.length === 0) {
+            return message_error('Debe tener al menos 1 producto en su detalle para previsualizar');
+        }
+
+        // Obtener datos del formulario
+        const dateJoined = $('input[name="date_joined"]').val() || '03-08-2026 11:53:57 AM';
+        const numberingRange = $('input[name="numbering_range"]').val() || 'SETP990000005';
+        const consecutive = $('input[name="consecutive"]').val() || '5';
+        
+        // Cliente
+        const clientText = select_client.find('option:selected').text() || 'COORSERPARK SAS';
+        const clientEmail = $('#client_email').val() || 'prueba1@gmail.com';
+        
+        // Pagos y observaciones
+        const paymentMethod = $('select[name="paymentmethod"] option:selected').text() || 'Pago a crédito';
+        const typeMethods = $('select[name="typemethods"] option:selected').text() || 'Consignación';
+        const description = $('textarea[name="description"], #id_description').val() || 'Factura generada desde POS';
+        const expirationDate = $('input[name="expiration_date"]').val() || '18-08-2026';
+
+        // Totales calculados
+        const subtotalSinIva = $('input[name="subtotal_12_sin_iva"]').val() || '0.00';
+        const totalIva = $('input[name="total_iva"]').val() || '0.00';
+        const totalDscto = $('input[name="total_dscto"]').val() || '0.00';
+        const totalGeneral = $('input[name="total"]').val() || '0.00';
+
+        // Construir filas de productos para la tabla
+        let productsHtml = '';
+        let totalLines = sale.detail.products.length;
+        
+        sale.detail.products.forEach(function (item, index) {
+            let pvp = parseFloat(item.pvp) || 0;
+            let cant = parseFloat(item.cant) || 0;
+            let dscto = parseFloat(item.dscto) || 0;
+            let itemTotal = item.total || 0;
+            let taxRate = item.iva || '0.00';
+
+            productsHtml += `
+                <tr>
+                    <td class="text-center align-middle">${index + 1}</td>
+                    <td class="text-start align-middle"><code>${item.code || '15'}</code></td>
+                    <td class="text-start align-middle">${item.name || item.short_name || 'Servicio'}</td>
+                    <td class="text-end align-middle">$${pvp.toLocaleString('es-CL', {minimumFractionDigits: 2})}</td>
+                    <td class="text-center align-middle">${cant.toFixed(2)}</td>
+                    <td class="text-end align-middle">$${dscto.toLocaleString('es-CL', {minimumFractionDigits: 2})}</td>
+                    <td class="text-center align-middle"><small class="fw-bold">(IVA)</small> ${taxRate}%</td>
+                    <td class="text-end align-middle fw-bold">$${parseFloat(itemTotal).toLocaleString('es-CL', {minimumFractionDigits: 2})}</td>
+                </tr>
+            `;
+        });
+
+        // Obtener la ruta del logo de la empresa y asegurar que sea absoluta desde la raíz
+        let companyLogo = 'https://cdn-sandbox.factus.com.co/companies/900438757/logos/logo-1L9qH3MCQcObTV27z4h2xMJKx5sIiSI6.png'; // Respaldo por defecto
+        
+        if (typeof company !== 'undefined' && company.image) {
+            // Si la ruta no empieza con http ni con barra, le anteponemos la barra '/' para que sea absoluta desde el dominio
+            companyLogo = company.image.startsWith('http') ? company.image : '/' + company.image.replace(/^\/+/, '');
+        }
+
+        // Maquetación HTML utilizando estrictamente Bootstrap 5 (Tamaño de fuente incrementado a 0.95rem)
+        const previewHtml = `
+            <div class="container-fluid bg-white p-4 border rounded shadow-sm text-dark" style="font-size: 0.95rem;">
+                
+                <!-- ENCABEZADO -->
+                <div class="row align-items-center pb-3 mb-4 border-bottom">
+                    <div class="col-4 text-center">
+                        <img src="${companyLogo}" class="img-fluid" style="max-width: 140px;" alt="Logo de la empresa">
+                    </div>
+                    <div class="col-4 text-center">
+                        <h6 class="fw-bold text-uppercase mb-1">Factura electrónica de Venta</h6>
+                        <h5 class="fw-bold text-primary mb-2">${numberingRange}</h5>
+                        <p class="fw-bold mb-1">EXEQUIALES ESCOBAR S.A.S</p>
+                        <p class="mb-0 text-muted small">NIT 900438757 - 2</p>
+                        <p class="mb-0 text-muted small">3023812461 | fexequialesescobar@hotmail.com</p>
+                        <p class="mb-0 text-muted small">Calle 5 # 7A-31, Facatativá - Cundinamarca</p>
+                    </div>
+                    <div class="col-4 text-end">
+                        <span class="badge bg-success">Factura Electrónica</span>
+                    </div>
+                </div>
+
+                <!-- DATOS CLIENTE Y FECHAS -->
+                <div class="row mb-4">
+                    <div class="col-lg-7 mb-3 mb-lg-0">
+                        <ul class="list-group list-group-flush border rounded">
+                            <li class="list-group-item d-flex py-1 px-2 bg-light"><span class="fw-bold w-25">CC/NIT:</span> <span class="w-75">12345678 - 8</span></li>
+                            <li class="list-group-item d-flex py-1 px-2"><span class="fw-bold w-25">Cliente:</span> <span class="w-75">${clientText}</span></li>
+                            <li class="list-group-item d-flex py-1 px-2 bg-light"><span class="fw-bold w-25">País:</span> <span class="w-75">Colombia</span></li>
+                            <li class="list-group-item d-flex py-1 px-2"><span class="fw-bold w-25">Municipio:</span> <span class="w-75">Bogotá, D.C. / Bogota-D.C.</span></li>
+                            <li class="list-group-item d-flex py-1 px-2 bg-light"><span class="fw-bold w-25">Dirección:</span> <span class="w-75">bogota</span></li>
+                            <li class="list-group-item d-flex py-1 px-2"><span class="fw-bold w-25">Email:</span> <span class="w-75">${clientEmail}</span></li>
+                        </ul>
+                    </div>
+                    <div class="col-lg-5">
+                        <ul class="list-group list-group-flush border rounded">
+                            <li class="list-group-item d-flex justify-content-between py-2 px-2 bg-light">
+                                <span class="fw-bold">Fecha de generación:</span> 
+                                <span>${dateJoined}</span>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between py-2 px-2">
+                                <span class="fw-bold">Fecha de validación:</span> 
+                                <span>${dateJoined}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- TABLA DE PRODUCTOS -->
+                <div class="table-responsive mb-4">
+                    <table class="table table-bordered table-sm align-middle">
+                        <thead class="table-light text-center">
+                            <tr>
+                                <th>#</th>
+                                <th>Código</th>
+                                <th>Descripción</th>
+                                <th>Val. Unit</th>
+                                <th>Cantidad</th>
+                                <th>Descuento</th>
+                                <th>Impuesto %</th>
+                                <th>Val. Item</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${productsHtml}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- OBSERVACIONES Y TOTALES -->
+                <div class="row mb-4">
+                    <div class="col-lg-7 mb-3 mb-lg-0">
+                        <div class="border rounded p-3 h-100 bg-light">
+                            <h6 class="fw-bold text-uppercase border-bottom pb-2">Observaciones</h6>
+                            <p class="mb-0 text-muted" style="white-space: pre-line;">${description}</p>
+                        </div>
+                    </div>
+                    <div class="col-lg-5">
+                        <div class="border rounded bg-white p-2">
+                            <h6 class="fw-bold text-uppercase border-bottom pb-2 text-center bg-light m-0 p-2">Totales</h6>
+                            <table class="table table-sm table-borderless mb-0">
+                                <tr><td>Nro líneas:</td><td class="text-end">${totalLines}</td></tr>
+                                <tr><td>Valor bruto:</td><td class="text-end">$${subtotalSinIva}</td></tr>
+                                <tr><td>Base imponible:</td><td class="text-end">$0.00</td></tr>
+                                <tr><td>Impuestos:</td><td class="text-end">$${totalIva}</td></tr>
+                                <tr><td>Descuento global (-):</td><td class="text-end">$${totalDscto}</td></tr>
+                                <tr><td>Recargo global (+):</td><td class="text-end">$0.00</td></tr>
+                                <tr class="border-top fw-bold text-success">
+                                    <td class="pt-2">Total factura:</td><td class="text-end pt-2">$${totalGeneral}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DETALLES DE PAGO Y TIPO DE OPERACIÓN -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold">Tipo de operación</h6>
+                        <p class="text-muted mb-0">Estándar</p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold">Detalles de Pago</h6>
+                        <div class="border-start border-3 border-primary ps-3 py-1">
+                            <p class="mb-1"><strong>Forma de pago:</strong> ${paymentMethod}</p>
+                            <p class="mb-1"><strong>Medio de pago:</strong> ${typeMethods}</p>
+                            <p class="mb-1"><strong>Referencia:</strong> pago-${consecutive}</p>
+                            <p class="mb-1"><strong>Monto:</strong> $${totalGeneral}</p>
+                            <p class="mb-0"><strong>Fecha de vencimiento:</strong> ${expirationDate}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PIE DE PAGINA / CUFE -->
+                <div class="bg-light p-3 rounded text-center border">
+                    <small class="fw-bold text-break d-block mb-2">CUFE: 940700f886b73eeee9a5ae93f23372e00930f3bb68d9489a55a99030e38dcbed</small>
+                    <hr class="my-2">
+                    <p class="text-muted mb-0" style="font-size: 0.85rem;">
+                        Actividad económica: 9603 - Resolución de Facturación Electrónica No: 18760000001 - Prefijo: SETP Rango 990000000 Al 995000000 - Vigencia desde 19-01-2019 - hasta 19-01-2030
+                    </p>
+                </div>
+
+            </div>
+        `;
+
+        $('#previewInvoiceContent').html(previewHtml);
+        $('#modalPreviewInvoice').modal('show');
+    });

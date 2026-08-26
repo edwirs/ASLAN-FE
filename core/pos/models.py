@@ -25,6 +25,23 @@ from core.pos.choices import PERSON_TYPE
 from core.pos.choices import TAX_RESPONSIBILITY
 from core.user.models import User
 
+class Departamento(models.Model):
+    nombre = models.CharField(max_length=100)
+    codigo = models.CharField(max_length=10, unique=True)
+
+    def __str__(self):
+        return self.nombre
+
+
+class Municipio(models.Model):
+    departamento = models.ForeignKey(Departamento, on_delete=models.CASCADE, related_name='municipios')
+    nombre = models.CharField(max_length=100)
+    codigo = models.CharField(max_length=10, unique=True)
+
+    def __str__(self):
+        # AQUÍ LOGRAS EL FORMATO QUE NECESITAS AUTOMÁTICAMENTE
+        return f"{self.departamento.nombre} - {self.nombre}"
+
 class Category(models.Model):
     name = models.CharField(max_length=50, unique=True, verbose_name='Nombre')
     description = models.CharField(max_length=500, null=True, blank=True, verbose_name='Descripción')
@@ -111,8 +128,9 @@ class Company(models.Model):
 
     def get_image(self):
         if self.image:
-            return f'{settings.MEDIA_URL}{self.image}'
-        return f'{settings.STATIC_URL}img/default/empty.png'
+            # Ruta absoluta en el disco para que xhtml2pdf la lea sin problemas
+            return os.path.join(settings.MEDIA_ROOT, self.image.name)
+        return os.path.join(settings.STATIC_URL, 'img/default/empty.png')
 
     def toJSON(self):
         item = model_to_dict(self)
@@ -167,7 +185,7 @@ class Client(models.Model):
     birthdate = models.DateField(default=datetime.now, verbose_name='Fecha de nacimiento')
     
     country = models.CharField(max_length=100, default='Colombia', verbose_name='País')
-    municipality = models.CharField(max_length=100, null=True, blank=True, verbose_name='Municipio / Ciudad')
+    municipality = models.ForeignKey(Municipio, on_delete=models.PROTECT, null=True, blank=True, verbose_name='Municipio / Ciudad')
     address = models.CharField(max_length=500, null=True, blank=True, verbose_name='Dirección')
     
     mobile = models.CharField(max_length=10, null=True, blank=True, verbose_name='Teléfono')
@@ -194,6 +212,14 @@ class Client(models.Model):
         item['tax_responsibility'] = {'id': self.tax_responsibility, 'name': self.get_tax_responsibility_display()}
         item['gender'] = {'id': self.gender, 'name': self.get_gender_display()}
         item['birthdate'] = self.birthdate.strftime('%Y-%m-%d')
+        if self.municipality:
+            item['municipality'] = {
+                'id': self.municipality.id,
+                'name': str(self.municipality), # Esto usará el __str__ de Municipio (DEPTO - Mun)
+                'code': self.municipality.codigo # El código necesario para Factus
+            }
+        else:
+            item['municipality'] = None
         return item
 
     class Meta:
@@ -283,8 +309,15 @@ class Sale(models.Model):
     factus_xml_url = models.URLField(max_length=500, null=True, blank=True)
     factus_cufe = models.TextField(null=True, blank=True)
     factus_resolution = models.TextField(null=True, blank=True)
+    factus_prefix = models.TextField(null=True, blank=True)
+    factus_range_from = models.TextField(null=True, blank=True)
+    factus_range_to = models.TextField(null=True, blank=True)
+    factus_date_from = models.TextField(null=True, blank=True)
+    factus_date_to = models.TextField(null=True, blank=True)
     factus_qr_url = models.URLField(null=True, blank=True) 
     is_electronicinvoice = models.BooleanField(default=False, verbose_name='Electronica')
+    email_sent_count = models.PositiveIntegerField(default=0, verbose_name="Correos enviados")
+    attachment = models.FileField(upload_to='sales/attachments/', null=True, blank=True, verbose_name="Archivo adjunto")
 
     def __str__(self):
         return self.client.get_full_name()
@@ -298,10 +331,16 @@ class Sale(models.Model):
     def calculate_invoice(self):
         self.subtotal_0 = float(self.saledetail_set.filter(product__with_tax=False).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))
         self.subtotal_12 = float(self.saledetail_set.filter(product__with_tax=True).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))
-        self.total_iva = float(self.saledetail_set.filter(product__with_tax=True).aggregate(result=Coalesce(Sum('total_iva'), 0.00, output_field=FloatField())).get('result'))
-        self.subtotal_12_sin_iva = self.subtotal_12 - self.total_iva
-        self.total_dscto = float(self.get_full_subtotal()) * float(self.dscto)
-        self.total = float(self.get_full_subtotal()) - float(self.total_dscto)
+        subtotal = float(self.get_full_subtotal())
+        discount_rate = float(self.dscto or 0)
+        self.total_dscto = subtotal * discount_rate
+
+        # El IVA se calcula sobre la base ya descontada. El total de una venta
+        # siempre debe incluirlo; de lo contrario difiere del total validado por DIAN/Factus.
+        iva_before_global_discount = float(self.saledetail_set.filter(product__with_tax=True).aggregate(result=Coalesce(Sum('total_iva'), 0.00, output_field=FloatField())).get('result'))
+        self.total_iva = iva_before_global_discount * (1 - discount_rate)
+        self.subtotal_12_sin_iva = self.subtotal_12 * (1 - discount_rate)
+        self.total = (subtotal - float(self.total_dscto)) + float(self.total_iva)
         self.save()
 
     def calculate_detail(self):
@@ -363,6 +402,11 @@ class Sale(models.Model):
         item['factus_resolution'] = self.factus_resolution
         item['factus_qr_url'] = self.factus_qr_url
         item['is_electronicinvoice'] = self.is_electronicinvoice
+        item['email_sent_count'] = self.email_sent_count
+        if self.attachment:
+            item['attachment'] = self.attachment.url
+        else:
+            item['attachment'] = None
 
         return item
 
@@ -1119,3 +1163,16 @@ class CashClosing(models.Model):
         verbose_name = 'Cierre de Caja'
         verbose_name_plural = 'Cierres de Caja'
         ordering = ['-created_at']
+
+class ObservationTemplate(models.Model):
+    name = models.CharField(max_length=150, verbose_name='Nombre de la plantilla')
+    code = models.CharField(max_length=50, unique=True, verbose_name='Código único (ej: contado, credito)')
+    content = models.TextField(verbose_name='Contenido de la observación')
+    is_active = models.BooleanField(default=True, verbose_name='Está activa')
+
+    def __str__(self):
+        return self.title
+
+    class Meta:
+        verbose_name = 'Plantilla de Observación'
+        verbose_name_plural = 'Plantillas de Observaciones'

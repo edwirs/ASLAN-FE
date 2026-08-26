@@ -95,7 +95,7 @@
                         </div>
                     </div>
 
-                    <div class="row">
+                    <div class="row d-none">
                         <div class="col-lg-6">
                             <div class="form-group">
                                 <label>{{ form.gender.label }}:</label>
@@ -135,6 +135,7 @@
                         <div class="col-lg-4">
                             <div class="form-group">
                                 <label>{{ form.municipality.label }}:</label>
+                                <!-- Renderiza el select con clase select2 heredada del Form -->
                                 {{ form.municipality }}
                             </div>
                         </div>
@@ -215,7 +216,7 @@
                                                 <div style="display:none;">{{ contact_form.DELETE }}</div>
                                             {% endif %}
                                             <button type="button" class="btn btn-danger btn-sm btn-flat remove-contact">
-                                                <i class="fas fa-trash-alt"></i> Eliminar
+                                                <i class="fas fa-trash-alt"></i>
                                             </button>
                                         </div>
                                     </div>

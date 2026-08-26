@@ -1,119 +1,239 @@
+import logging
+import base64
+from datetime import date
+from decimal import Decimal
+
 import requests
 from django.conf import settings
-from datetime import timedelta
+from django.utils import timezone
 
-FACTUS_API_URL = "https://api-sandbox.factus.com.co"
-CLIENT_ID = "9e990a1c-e566-4172-9957-6226cd9e7f91"
-CLIENT_SECRET = "NIq8gczyPGTJ6zEHJmqwtOyZeTkWBi1wNkynCWk1"
-USERNAME = "sandbox@factus.com.co"
-PASSWORD = "sandbox2024%"
+
+logger = logging.getLogger(__name__)
+
+# Estas credenciales se deben mover a variables de entorno antes de desplegar a
+# producción. Se conservan temporalmente aquí para no interrumpir la integración
+# ya configurada en este proyecto.
+FACTUS_API_URL = "https://api.factus.com.co"
+CLIENT_ID = "a2548925-3bca-4186-95da-487fab9ce2a8"
+CLIENT_SECRET = "aOIEg9SB8Lqn9Kqu8Yz3UZiIUg76HGxHylAF1LTl"
+USERNAME = "fexequialesescobar@hotmail.com"
+PASSWORD = "11426546"
+
+REQUEST_TIMEOUT = 30
+
+
+def _as_money(value):
+    return f"{value or 0:.2f}"
+
+
+def _nit_dv(nit):
+    """Calcula el dígito de verificación DIAN para un NIT sin DV."""
+    digits = "".join(char for char in str(nit) if char.isdigit())
+    if not digits:
+        return ""
+
+    weights = (71, 67, 59, 53, 47, 43, 41, 37, 29, 23, 19, 17, 13, 7, 3)
+    total = sum(int(digit) * weight for digit, weight in zip(digits.zfill(15), weights))
+    residue = total % 11
+    return str(residue if residue < 2 else 11 - residue)
+
+
+def _error_response(response, body=None):
+    if body is None:
+        try:
+            body = response.json()
+        except ValueError:
+            body = response.text
+    logger.warning("Factus rechazó la solicitud (HTTP %s): %s", response.status_code, body)
+    return {"error": "Factus rechazó la factura", "detail": body}
+
 
 def get_token():
-    url = f"{FACTUS_API_URL}/oauth/token"
-    data = {
-        "grant_type": "password",
-        "username": USERNAME,
-        "password": PASSWORD,
-        "client_id": CLIENT_ID,
-        "client_secret": CLIENT_SECRET
-    }
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    response = requests.post(url, data=data, headers=headers)
+    response = requests.post(
+        f"{FACTUS_API_URL}/oauth/token",
+        data={
+            "grant_type": "password",
+            "username": USERNAME,
+            "password": PASSWORD,
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+        },
+        headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
+        timeout=REQUEST_TIMEOUT,
+    )
     response.raise_for_status()
     return response.json()["access_token"]
 
 
-def create_invoice(sale):
-    token = get_token()
+def get_numbering_ranges():
+    """Consulta los rangos de numeración activos disponibles en Factus."""
+    try:
+        response = requests.get(
+            f"{FACTUS_API_URL}/v2/numbering-ranges",
+            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            return _error_response(response)
+        return response.json()
+    except (requests.RequestException, ValueError, KeyError) as exc:
+        logger.exception("No fue posible consultar los rangos de Factus")
+        return {"error": "No fue posible consultar los rangos de Factus", "detail": str(exc)}
 
-    start_date = sale.date_joined.date()
-    end_date = start_date + timedelta(days=1)
 
-    # Cliente
+def create_invoice(sale, numbering_range_id, target_email=None):
+    """Construye y valida una factura estándar (operación 10) en Factus v2."""
+    client = sale.client
+    document_code = str(getattr(client.document_type, "code", "") or "31")
+    is_nit = document_code == "31"
+    is_company = client.person_type == "juridica"
+    client_email = (target_email or client.email or "").strip()
+
     customer = {
-        "identification": sale.client.dni,
-        "dv": sale.client.dni[-1] if sale.client.dni.isdigit() else "0",
-        "company": "",
-        "trade_name": sale.client.names,
-        "names": sale.client.names,
-        "address": sale.client.address or "Sin dirección",
-        "email": sale.client.email or "correo@demo.com",
-        "phone": sale.client.mobile or "0000000000",
-        "legal_organization_id": "1",       # persona jurídica
-        "tribute_id": "21",                 # régimen común
-        "identification_document_id": "3",  # CC
-        "municipality_id": "980"            # Bogotá (ajusta según tu cliente)
+        "identification_document_code": document_code,
+        "identification": str(client.dni).replace("-", "").strip(),
+        "address": client.address or "Sin dirección",
+        "phone": client.mobile or "3000000000",
+        "legal_organization_code": "1" if is_company else "2",
+        "tribute_code": "01" if client.tax_responsibility == "responsable" else "ZZ",
+        "country_code": "CO",
+        "municipality_code": client.municipality.codigo if client.municipality else "11001",
     }
+    if client_email:
+        customer["email"] = client_email
+    if is_company:
+        customer["company"] = client.names
+        customer["trade_name"] = client.commercial_name or client.names
+    else:
+        customer["names"] = client.names
+        customer["trade_name"] = client.commercial_name or client.names
+    if is_nit:
+        customer["dv"] = _nit_dv(customer["identification"])
 
-    # Items
     items = []
-    for detail in sale.saledetail_set.all():
-        discount_rate = float(detail.dscto or 0) * 100
-        discount = float(detail.total_dscto or 0)
-        tax_rate = "19.00" if detail.product.with_tax else "0.00"
+    for detail in sale.saledetail_set.select_related("product"):
+        product = detail.product
+        line_discount_rate = Decimal(str(detail.dscto or 0))
+        global_discount_rate = Decimal(str(sale.dscto or 0))
+        effective_discount_rate = Decimal("1") - (
+            (Decimal("1") - line_discount_rate) * (Decimal("1") - global_discount_rate)
+        )
+        tax_rate = Decimal(str(sale.iva or 0)) * 100
+        tax = {"code": "01", "rate": _as_money(tax_rate)}
+        if not product.with_tax or tax_rate == 0:
+            tax.update({"rate": "0.00", "is_excluded": True})
 
         items.append({
-            "scheme_id": "0",  # fijo por ahora
-            "note": "",
-            "code_reference": detail.product.code,
-            "name": detail.product.name,
-            "quantity": float(detail.cant),
-            "discount_rate": discount_rate,
-            "discount": discount,
-            "price": float(detail.price),
-            "tax_rate": tax_rate,
-            "unit_measure_id": 70,
-            "standard_code_id": 1,
-            "is_excluded": 0,
-            "tribute_id": 1,
-            "withholding_taxes": []
+            "code_reference": product.code,
+            "name": product.name,
+            "quantity": _as_money(detail.cant),
+            "discount_rate": _as_money(effective_discount_rate * 100),
+            "price": _as_money(detail.price),
+            "unit_measure_code": "94",
+            "standard_code": "999",
+            "taxes": [tax],
         })
 
+    payment_form = "2" if sale.typemethods == "credit" else "1"
+    payment_detail = {
+        "payment_form": payment_form,
+        "payment_method_code": "10" if sale.paymentmethod == "cash" else "42",
+        "reference_code": f"pago-{sale.id}",
+        "amount": _as_money(sale.total),
+    }
+    if payment_form == "2":
+        due_date = sale.expiration_date
+        if isinstance(due_date, str):
+            try:
+                due_date = date.fromisoformat(due_date)
+            except ValueError:
+                due_date = None
+        today = timezone.localdate()
+        if not due_date:
+            return {"error": "La venta a crédito requiere fecha de vencimiento"}
+        if due_date <= today:
+            return {
+                "error": "La fecha de vencimiento debe ser posterior a la fecha actual",
+                "detail": {"payment_details.0.due_date": ["Seleccione al menos el día siguiente."]},
+            }
+        payment_detail["due_date"] = due_date.isoformat()
+
     payload = {
-        "numbering_range_id": 8,
         "reference_code": str(sale.id),
-        "observation": f"Factura generada desde POS - Venta #{sale.id}",
-        "payment_form": "1" if getattr(sale, "typemethods", "") == "contado" else "2",
-        "payment_due_date": str(getattr(sale, "expiration_date", "")) if getattr(sale, "typemethods", "") == "credito" else str(end_date),
-        "payment_method_code": "10" if getattr(sale, "paymentmethod", "") == "efectivo" else "42",
-        "operation_type": 10,
+        "document": "01",
+        "numbering_range_id": int(numbering_range_id),
+        "operation_type": "10",
         "send_email": False,
-        "order_reference": {
-            "reference_code": f"sale-{sale.id}",
-            "issue_date": str(sale.date_joined.date())
-        },
-        "billing_period": {
-            "start_date": str(start_date),
-            "start_time": "00:00:00",
-            "end_date": str(end_date),
-            "end_time": "23:59:59"
-        },
+        "payment_details": [payment_detail],
+        "cash_rounding_amount": "0.00",
         "customer": customer,
-        "items": items
+        "items": items,
     }
 
-    url = f"{FACTUS_API_URL}/v1/bills/validate"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json"
-    }
-
-    print("========== PAYLOAD ENVIADO A FACTUS ==========")
-    import json
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
-
-    response = requests.post(url, json=payload, headers=headers)
-
-    # Si falla, imprime respuesta de factus para ver el detalle
-    if response.status_code != 200:
-        print("========== RESPUESTA FACTUS ==========")
+    try:
+        response = requests.post(
+            f"{FACTUS_API_URL}/v2/bills/validate",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {get_token()}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
         try:
-            error_detail = response.json()
-            print(json.dumps(error_detail, indent=2, ensure_ascii=False))
-        except Exception:
-            print(response.text)
-        return {"error": f"Error {response.status_code}", "detail": error_detail}
+            body = response.json()
+        except ValueError:
+            body = response.text
 
-    return response.json()
+        if not response.ok or not isinstance(body, dict) or body.get("status") == "Validation error":
+            return _error_response(response, body)
+        return body
+    except (requests.RequestException, KeyError) as exc:
+        logger.exception("No fue posible enviar la factura %s a Factus", sale.id)
+        return {"error": "No fue posible comunicarse con Factus", "detail": str(exc)}
 
 
+def download_invoice_xml(bill_number):
+    """
+    Consume el endpoint de Factus para obtener el contenido XML 
+    de una factura validada utilizando su número.
+    """
+    try:
+        response = requests.get(
+            f"{FACTUS_API_URL}/v2/bills/{bill_number}/download-xml",
+            headers={
+                "Authorization": f"Bearer {get_token()}",
+                "Accept": "application/json",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            return _error_response(response)
+        return response.content
+    except (requests.RequestException, ValueError) as exc:
+        logger.exception("No fue posible descargar el XML de la factura %s desde Factus", bill_number)
+        return {"error": "No fue posible descargar el XML", "detail": str(exc)}
+
+
+def download_invoice_pdf(invoice_number):
+    """
+    Consume el endpoint de Factus para descargar el PDF binario de la factura.
+    """
+    try:
+        response = requests.get(
+            f"{FACTUS_API_URL}/v2/bills/{invoice_number}/download-pdf",
+            headers={
+                "Authorization": f"Bearer {get_token()}",
+                "Accept": "application/pdf",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            return _error_response(response)
+
+        # Si Factus responde directamente con el binario del PDF
+        return response.content
+    except Exception as exc:
+        logger.exception("No fue posible descargar el PDF de la factura %s desde Factus", invoice_number)
+        return {"error": "No fue posible descargar el PDF", "detail": str(exc)}

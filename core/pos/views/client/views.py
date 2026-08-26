@@ -18,11 +18,12 @@ class ClientListView(GroupPermissionMixin, TemplateView):
 
     def post(self, request, *args, **kwargs):
         data = {}
-        action = request.POST['action']
+        action = request.POST.get('action')
         try:
             if action == 'search':
                 data = []
-                for i in Client.objects.all():
+                # Optimizamos la consulta con select_related para traer el municipio y departamento de una sola vez
+                for i in Client.objects.all().select_related('municipality', 'municipality__departamento', 'document_type'):
                     data.append(i.toJSON())
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
@@ -56,13 +57,11 @@ class ClientCreateView(GroupPermissionMixin, CreateView):
 
                 if form.is_valid() and contacts_formset.is_valid():
                     with transaction.atomic():
-                        # 1. Ejecutamos el save personalizado de tu formulario para que guarde y retorne su diccionario o datos
+                        # form.save() ejecuta el método save() del ClientForm, que ya retorna el toJSON() del cliente creado
                         data = form.save()
                         
-                        # 2. Obtenemos la instancia real del modelo directamente desde form.instance
                         client_instance = form.instance
                         
-                        # 3. Asignamos la instancia al formset y guardamos los contactos
                         contacts_formset.instance = client_instance
                         contacts_formset.save()
                 else:
@@ -110,13 +109,11 @@ class ClientUpdateView(GroupPermissionMixin, UpdateView):
 
                 if form.is_valid() and contacts_formset.is_valid():
                     with transaction.atomic():
-                        # 1. Ejecutamos el save del formulario existente
+                        # form.save() ejecuta el save() del formulario y retorna el toJSON() actualizado
                         data = form.save()
                         
-                        # 2. Extraemos la instancia pura del modelo desde form.instance
                         client_instance = form.instance
                         
-                        # 3. Asociamos y guardamos los contactos con la instancia correcta
                         contacts_formset.instance = client_instance
                         contacts_formset.save()
                 else:

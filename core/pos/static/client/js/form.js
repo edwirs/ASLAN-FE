@@ -11,6 +11,7 @@ $(function () {
         maxDate: new Date()
     });
 
+    // Inicializa Select2 para todos los selects con la clase, incluyendo document_type, gender y municipality
     $('.select2').select2({
         language: 'es',
         theme: 'bootstrap4'

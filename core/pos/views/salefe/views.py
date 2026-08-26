@@ -2,6 +2,7 @@ import json
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
@@ -18,7 +19,8 @@ from core.pos.utilities import printer
 from core.reports.forms import ReportForm
 from core.security.mixins import GroupPermissionMixin
 from core.pos.choices import PAYMENTMETHODS, TRANSFERMETHODS
-from core.services.factus import create_invoice
+from core.services.factus import create_invoice, get_numbering_ranges, download_invoice_xml
+from core.services.services import send_sale_electronic_invoice_email, generate_qr_base64_from_url
 
 MODULE_NAME = 'Ventas FE'
 
@@ -95,7 +97,7 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
     model = Sale
     template_name = 'salefe/admin/create.html'
     form_class = SaleForm
-    success_url = reverse_lazy('sale_Fe_admin_create')
+    success_url = reverse_lazy('sale_Fe_admin_list')
     permission_required = 'add_sale'
 
     def post(self, request, *args, **kwargs):
@@ -133,6 +135,7 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
 
                     sale.service_type = request.POST.get('service_type')
                     sale.propina = float(request.POST.get('propina', 0) or 0)
+                    sale.description = request.POST.get('description', '').strip()
                     sale.is_electronicinvoice = True
                     sale.save()
 
@@ -162,25 +165,59 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
                     sale.calculate_detail()
                     sale.calculate_invoice()
 
-                    # Enviar a Factus
-                    factus_response = create_invoice(sale)
-                    detail_resp = factus_response.get("detail", {})
-                    data_resp = detail_resp.get("data", {})
-
-                    if data_resp:
-                        bill_data = data_resp.get("bill", {})
-                        numbering_range = data_resp.get("numbering_range", {})
-
-                        sale.factus_invoice_id = bill_data.get("number")
-                        sale.factus_status = bill_data.get("status")
-                        sale.factus_pdf_url = bill_data.get("public_url")
-                        sale.factus_cufe = bill_data.get("cufe")
-                        sale.factus_resolution = numbering_range.get("resolution_number")
-                        sale.factus_qr_url = bill_data.get("qr")
+                    target_email = request.POST.get('client_email', '')
+                    
+                    # Capturamos el numbering_range_id enviado desde el campo oculto del formulario
+                    numbering_range_id = request.POST.get('numbering_range_id')
+                    if not numbering_range_id:
+                        numbering_range_id = 8
                     else:
-                        sale.factus_status = "error"
+                        numbering_range_id = int(numbering_range_id)
+
+                    # Enviar a Factus pasando el numbering_range_id optimizado
+                    factus_response = create_invoice(sale, numbering_range_id=numbering_range_id, target_email=target_email)
+                    if "error" in factus_response:
+                        # Al salir del bloque atomic se revierte venta, detalle e inventario.
+                        raise ValidationError(factus_response.get("error"))
+
+                    data_resp = factus_response.get("data", {})
+                    # Factus v2 retorna los datos de la factura directamente en
+                    # ``data``. Se conserva el fallback para respuestas antiguas.
+                    bill_data = data_resp.get("bill", data_resp)
+                    numbering_range = data_resp.get("numbering_range", {})
+                    if not bill_data or not bill_data.get("number"):
+                        raise ValidationError("Factus no devolvió los datos de la factura creada")
+
+                    links_data = bill_data.get("links", {})
+                    sale.factus_invoice_id = bill_data.get("number")
+                    sale.factus_status = bill_data.get("status") or (
+                        "validated" if bill_data.get("is_validated") else "pending"
+                    )
+                    sale.factus_pdf_url = links_data.get("public_url")
+                    sale.factus_cufe = bill_data.get("cufe")
+                    sale.factus_resolution = numbering_range.get("resolution_number")
+                    sale.factus_prefix = numbering_range.get("prefix")
+                    sale.factus_range_from = numbering_range.get("from")
+                    sale.factus_range_to = numbering_range.get("to")
+                    sale.factus_date_from = numbering_range.get("date_from")
+                    sale.factus_date_to = numbering_range.get("date_to")
+                    sale.factus_qr_url = links_data.get("qr")
                     
                     sale.save()
+
+                   # CAPTURAR ARCHIVOS ADJUNTOS UNIFICADOS
+                    files_list = request.FILES.getlist('pdf_files')
+                    if files_list:
+                        # Si tu modelo Sale tiene un campo individual para respaldo:
+                        sale.attachment = files_list[0]
+                        sale.save(update_fields=['attachment'])
+                    
+                    # NUEVO: Disparar el servicio de correo electrónico (PDF + XML + Adjunto opcional)
+                    email_result = send_sale_electronic_invoice_email(sale, request=self.request)
+
+                    if not email_result.get("success"):
+                        # Opcional: Puedes loguear el error o mostrar una advertencia sin frenar la venta
+                        logger.warning("No se pudo enviar el correo de la factura: %s", email_result.get("message"))
                     data = {'print_url': str(reverse_lazy('sale_Fe_admin_print_invoice', kwargs={'pk': sale.id}))}
 
             elif action == 'search_products':
@@ -214,7 +251,6 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
                     Q(names__icontains=term) | Q(dni__icontains=term)
                 ).order_by('names')[:10]:
                     item = i.toJSON()
-                    # Forzamos enviar el texto y el email para Select2
                     item['text'] = i.get_full_name()
                     item['email'] = getattr(i, 'email', '') or ''
                     data.append(item)
@@ -222,6 +258,9 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
             elif action == 'create_client':
                 form = ClientForm(self.request.POST)
                 data = form.save()
+            elif action == 'test_numbering_ranges':
+                ranges_response = get_numbering_ranges()
+                data = ranges_response
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
@@ -240,7 +279,37 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
         return {}
 
     def get_context_data(self, **kwargs):
-        context = super().get_context_data()
+        context = super().get_context_data(**kwargs)
+        
+        try:
+            response_data = get_numbering_ranges()
+            ranges = response_data.get('data', {}).get('data', [])
+            
+            active_range = next((r for r in ranges if r.get('document') == 'Factura de Venta' and r.get('is_active')), {})
+            
+            prefix = active_range.get('prefix')
+            from_num = active_range.get('from', 0)
+            to_num = active_range.get('to', 0)
+            
+            if prefix and str(prefix).strip():
+                context['factus_range_text'] = f"{prefix} ({from_num} - {to_num})"
+            else:
+                context['factus_range_text'] = f"({from_num} - {to_num})"
+                
+            context['factus_current'] = active_range.get('current', 1)
+            # Pasamos el ID real obtenido de la API al contexto para asignarlo al campo oculto
+            context['factus_range_id'] = active_range.get('id', 8)
+            templates_dict = {
+                t.code: t.content 
+                for t in ObservationTemplate.objects.filter(is_active=True)
+            }
+            context['observation_templates'] = templates_dict
+        except Exception as e:
+            print("ERROR OBTENIENDO RANGOS FACTUS:", str(e))
+            context['factus_range_text'] = "(0 - 0)"
+            context['factus_current'] = "1"
+            context['factus_range_id'] = 8
+
         context['frmClient'] = ClientForm()
         context['list_url'] = self.success_url
         context['title'] = 'Nuevo registro de una Venta Electrónica'
@@ -295,10 +364,36 @@ class SaleFePrintInvoiceView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         try:
             sale = Sale.objects.get(id=self.kwargs['pk'])
+            
+            # 1. Búsqueda blindada de la compañía (igual que en el servicio de PDF)
+            company = None
+            if sale.company_id:
+                company = Company.objects.filter(id=sale.company_id).first()
+                
+            if not company:
+                company = Company.objects.filter(is_active=True).first() or Company.objects.first()
+
+            # 2. Variables planas de respaldo
+            c_name = company.name if company else "Compañía sin nombre"
+            c_ruc = company.ruc if company else "N/A"
+            c_email = company.email if company else ""
+            c_address = company.address if company else ""
+            c_image = company.image.url if (company and company.image and hasattr(company.image, 'url')) else None
+
+            qr_data_to_encode = sale.factus_qr_url if sale.factus_qr_url else sale.factus_cufe
+            qr_base64 = generate_qr_base64_from_url(qr_data_to_encode)
+
             context = {
                 'sale': sale,
+                'company': company,
+                'company_name': c_name,
+                'company_ruc': c_ruc,
+                'company_email': c_email,
+                'company_address': c_address,
+                'company_image_path': c_image, # En HTML web usamos .url en vez de .path
+                'qr_base64': qr_base64,
                 'height': 450 + sale.saledetail_set.all().count() * 10
             }
-            return render(request, 'salefe/format/ticket.html', context)
+            return render(request, 'salefe/format/invoice.html', context)
         except Sale.DoesNotExist:
             return HttpResponseRedirect(settings.LOGIN_REDIRECT_URL)

@@ -1,5 +1,5 @@
 from django import forms
-from datetime import date
+from datetime import date, timedelta
 from django.forms import inlineformset_factory
 
 from .models import *
@@ -154,9 +154,9 @@ class ClientForm(forms.ModelForm):
                 'class': 'form-control',
                 'placeholder': 'País'
             }),
-            'municipality': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Municipio o ciudad'
+            'municipality': forms.Select(attrs={
+                'class': 'form-control select2',
+                'style': 'width: 100%'
             }),
             'address': forms.TextInput(attrs={
                 'class': 'form-control',
@@ -347,7 +347,7 @@ class SaleForm(forms.ModelForm):
             }),
             'description': forms.Textarea(attrs={
                 'class': 'form-control',
-                'rows': 7,
+                'rows': 8,
                 'placeholder': 'Observaciones de la venta...',
                 'style': 'resize:none;'
             }),
@@ -355,10 +355,8 @@ class SaleForm(forms.ModelForm):
         
 def next_month_day_10():
     today = date.today()
-    if today.month == 12:
-        return date(today.year + 1, 1, 10)
-    else:
-        return date(today.year, today.month + 1, 10)
+    future_date = today + timedelta(days=15)
+    return future_date.strftime('%Y-%m-%d')
 
 class PriceForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):

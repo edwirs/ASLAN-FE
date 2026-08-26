@@ -32,26 +32,23 @@ var sale = {
             order: [[0, 'desc']],
             columns: [
                 {data: "id"},
+                {data: "factus_invoice_id"},
                 {data: "client.names"},
-                {data: "employee.names"},
                 {data: "date_joined"},
-                {data: "total_dscto"},
                 {data: "total"},    
                 {data: "paymentmethod.name"},
-                {data: "transfermethods.name"},
-                {data: "service_type.name"},
                 {data: "id"},
             ],
             columnDefs: [
                 {
-                    targets: [-5, -6],
+                    targets: [-3],
                     class: 'text-center',
                     render: function (data, type, row) {
                         return '$' + parseFloat(data).toLocaleString('es-CL');
                     }
                 },
                 {
-                    targets: [-2, -3, -7],
+                    targets: [-2],
                     class: 'text-center',
                 },
                 {
@@ -59,9 +56,7 @@ var sale = {
                     class: 'text-center',
                     render: function (data, type, row) {
                         var buttons = '<a rel="detail" data-bs-toggle="tooltip" title="Detalle" class="btn btn-success btn-sm rounded-pill"><i class="fas fa-boxes"></i></a> ';
-                        buttons += '<a href="' + pathname + 'delete/' + row.id + '/" data-bs-toggle="tooltip" title="Eliminar" class="btn btn-danger btn-sm rounded-pill"><i class="fas fa-trash"></i></a> ';
                         buttons += '<a href="#" rel="print" data-id="' + row.id + '" data-bs-toggle="tooltip" title="Imprimir" class="btn btn-secondary btn-sm rounded-pill"><i class="fas fa-print"></i></a>';                        
-                        buttons += '<a href="#" rel="myModalEdit" data-id="' + row.id + '" data-bs-toggle="tooltip" title="Editar Pago" class="btn btn-warning btn-sm rounded-pill"><i class="fas fa-money-check-dollar text-white"></i></a>';
 
                         return buttons;
                     }

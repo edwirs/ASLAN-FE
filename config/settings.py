@@ -149,9 +149,9 @@ def get_db_config(environ_var='DATABASE_URL'):
 DATABASES = {
     'default': {
         'ENGINE': 'django_tenants.postgresql_backend',
-        'NAME': 'aslanFe',
+        'NAME': 'Aslan_core',
         'USER': 'postgres',
-        'PASSWORD': '1496',
+        'PASSWORD': 'Postgres2025',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -225,11 +225,13 @@ AUTH_USER_MODEL = 'user.User'
 
 # Email
 
+EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.smtp.EmailBackend')
 EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=True)
-EMAIL_HOST = env('EMAIL_HOST')
-EMAIL_PORT = env('EMAIL_PORT')
-EMAIL_HOST_USER = env('EMAIL_HOST_USER')
-EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
+EMAIL_HOST = env('EMAIL_HOST', default='')
+EMAIL_PORT = env('EMAIL_PORT', default=587)
+EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='uxpqxymfigwubogy')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='noreplyaslanfe@gmail.com')
 
 # Sessions
 

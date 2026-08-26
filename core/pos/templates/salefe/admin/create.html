@@ -1,7 +1,5 @@
 {% extends 'form.html' %}
-{% block body_class %}
-sidebar-collapse
-{% endblock %}
+
 {% load widget_tweaks %}
 {% load static %}
 
@@ -21,7 +19,7 @@ sidebar-collapse
 
     <style>
         .card-custom {
-            border: none !important;
+            border: 1px solid #e5e7eb;
             border-radius: 12px !important;
             box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05) !important;
             transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -133,15 +131,15 @@ sidebar-collapse
 {% endblock %}
 
 {% block form_fields %}
-<div class="row g-3">
+<div class="row g-2">
     <!-- Tipo de Registro -->
     <div class="col-12">
-        <div class="card card-custom p-3 bg-white">
+        <div class="card card-custom p-3 bg-white mb-0">
             <div class="form-section-title"><i class="fas fa-file-alt me-1 mr-1"></i> Tipo de Registro</div>
             <div class="row">
                 <div class="col-12 col-lg-4">
                     <label class="form-label label-dark">Tipo Documento:</label>
-                    {{ form.date_joined }}
+                    <input type="text" class="form-control" readonly value="Factura Electrónica de Venta">
                 </div>
             </div>
         </div>
@@ -149,7 +147,7 @@ sidebar-collapse
 
     <!-- Control de Documento -->
     <div class="col-12">
-        <div class="card card-custom p-3 bg-white">
+        <div class="card card-custom p-3 bg-white mb-0">
             <div class="form-section-title"><i class="fas fa-hashtag me-1 mr-1"></i> Control de Documento</div>
             <div class="row">
                 <div class="col-12 col-lg-4 mb-3 mb-lg-0">
@@ -157,12 +155,14 @@ sidebar-collapse
                     {{ form.date_joined }}
                 </div>
                 <div class="col-12 col-lg-4 mb-3 mb-lg-0">
+                    <!-- Campo oculto para almacenar el ID del rango de numeración -->
+                    <input type="hidden" id="numbering_range_id" name="numbering_range_id" value="">
                     <label class="form-label label-dark"><i class="fas fa-list-ol me-1 mr-1"></i>Rango de numeración:</label>
-                    {{ form.date_joined }}
+                    <input type="text" name="numbering_range" class="form-control" readonly>
                 </div>
                 <div class="col-12 col-lg-4">
                     <label class="form-label label-dark"><i class="fas fa-receipt me-1 mr-1"></i>Consecutivo factura:</label>
-                    {{ form.date_joined }}
+                    <input type="text" name="consecutive" class="form-control" readonly>
                 </div>
             </div>
         </div>
@@ -170,7 +170,7 @@ sidebar-collapse
 
     <!-- Datos del Cliente -->
     <div class="col-12">
-        <div class="card card-custom p-3 bg-white">
+        <div class="card card-custom p-3 bg-white mb-0">
             <div class="form-section-title"><i class="fas fa-user-tag me-1 mr-1"></i> Datos del Cliente</div>
             <div class="row">
                 <div class="col-lg-6 mb-3 mb-lg-0">
@@ -199,7 +199,7 @@ sidebar-collapse
 
     <!-- Detalle de Items -->
     <div class="col-12">
-        <div class="card card-custom p-3 bg-white">
+        <div class="card card-custom p-3 bg-white mb-0">
             <div class="form-section-title"><i class="fas fa-boxes me-1 mr-1"></i> Detalle de Items</div>
             <div class="mb-4">
                 <label class="form-label label-dark">Búsqueda de productos o servicios:</label>
@@ -238,7 +238,7 @@ sidebar-collapse
 
     <!-- Totales -->
     <div class="col-12">
-        <div class="invoice-summary-container">
+        <div class="invoice-summary-container mb-0">
             <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch align-items-md-center">
                 <div class="summary-item summary-divider">
                     <span class="summary-label">Total Bruto</span>
@@ -265,26 +265,26 @@ sidebar-collapse
     </div>
 
     <!-- Descripción y Pagos -->
-    <div class="col-12 mt-3">
-        <div class="row">
-           <div class="col-lg-8 mb-4">
-    <div class="card card-custom h-100 bg-white card-fill-container">
-        <div class="card-header bg-transparent border-0 pt-3 pb-0">
-            <div class="d-flex justify-content-between align-items-center w-100">
-                <h6 class="mb-0 font-weight-bold text-dark" style="color: #334155 !important;">Observaciones</h6>
-                <small class="text-muted mb-0" id="charCountDisplay" style="font-size: 0.85rem;">(0/500)</small>
+    <div class="col-12">
+        <div class="row g-2">
+           <div class="col-lg-7">
+                <div class="card card-custom h-100 bg-white card-fill-container mb-0">
+                    <div class="card-header bg-transparent border-0 pt-3 pb-0">
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <h6 class="mb-0 font-weight-bold text-dark" style="color: #334155 !important;">Observaciones</h6>
+                            <small class="text-muted mb-0" id="charCountDisplay" style="font-size: 0.85rem;">(0/500)</small>
+                        </div>
+                    </div>
+                    <div class="card-body pt-2">
+                        <div class="form-group mb-0">
+                            {{ form.description }}
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-        <div class="card-body pt-2">
-            <div class="form-group mb-0">
-                {{ form.description }}
-            </div>
-        </div>
-    </div>
-</div>
 
-            <div class="col-lg-4 mb-4">
-                <div class="card card-custom h-100 bg-white">
+            <div class="col-lg-5">
+                <div class="card card-custom h-100 bg-white mb-0">
                     <div class="card-header bg-transparent border-0 pt-3 pb-0">
                         <h6 class="mb-0 font-weight-bold label-dark"><i class="far fa-credit-card me-1 mr-1"></i> Método y Forma de Pago</h6>
                     </div>
@@ -331,7 +331,7 @@ sidebar-collapse
 
     <!-- Módulo de Carga de Comprobantes PDF -->
     <div class="col-12">
-        <div class="card card-custom card-outline card-primary collapsed-card" id="cardPdfSection">
+        <div class="card card-custom card-outline collapsed-card mb-0" id="cardPdfSection">
             <div class="card-header border-0 bg-transparent" style="cursor: pointer;" data-card-widget="collapse">
                 <h3 class="card-title font-weight-bold text-dark">
                     <i class="fas fa-file-pdf text-danger mr-2 me-2"></i> Comprobantes / Documentos Adjuntos
@@ -382,9 +382,35 @@ sidebar-collapse
         </div>
     </div>
 </div>
+
+
+<!-- Modal de Previsualización de Factura -->
+<div class="modal fade" id="modalPreviewInvoice" tabindex="-1" role="dialog" aria-labelledby="modalPreviewLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title fw-bold" id="modalPreviewLabel">
+                    <i class="fas fa-file-invoice-dollar me-2"></i> Previsualización de Factura Electrónica
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bg-light p-4" id="previewInvoiceContent">
+                <!-- El contenido dinámico de la factura se inyectará aquí via JS -->
+            </div>
+            <div class="modal-footer bg-white">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block buttons %}
+    <button type="button" class="btn btn-success px-4 shadow-sm" id="btnPreviewInvoice">
+        <i class="fas fa-list-check mr-1 me-1"></i> Previsualizar
+    </button>
     <button type="submit" class="btn btn-primary px-4 shadow-sm">
         <i class="fas fa-file-invoice-dollar mr-1 me-1"></i> Guardar y Enviar
     </button>
@@ -394,6 +420,19 @@ sidebar-collapse
 {% endblock %}
 
 {% block content_form_before %}
+{{ observation_templates|json_script:"observation-templates-data" }}
+    <script>
+        // Inyectamos dinámicamente desde el contexto de Django
+        const ACTIVE_RANGE_ID = "{{ factus_range_id|default:'8' }}";
+        document.addEventListener("DOMContentLoaded", function() {
+            const hiddenInput = document.getElementById("numbering_range_id");
+            if (hiddenInput) {
+                hiddenInput.value = ACTIVE_RANGE_ID;
+            }
+        });
+        const FACTUS_RANGE_DISPLAY = "{{ factus_range_text|default:'SETP (0 - 0)' }}";
+        const FACTUS_CURRENT_CONSECUTIVE = "{{ factus_current|default:'1' }}";
+    </script>
     <!-- Archivo JS externo referenciado -->
     <script src="{% static 'salefe/admin/js/form.js' %}"></script>
     <iframe id="print_frame" style="display:none;"></iframe>
