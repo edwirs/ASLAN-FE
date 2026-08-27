@@ -27,7 +27,8 @@ def create_default_domain(sender, instance, created, **kwargs):
     if created:
         # Asume que el dominio será 'schema_name.critera.online'
         # Puedes cambiar 'critera.online' por tu dominio principal
-        domain_name = f"{instance.schema_name}.critera.online"
+        BASE_DOMAIN = env("BASE_DOMAIN", default="aslantecnologia.online")
+        domain_name = f"{instance.schema_name}.{BASE_DOMAIN}"
         
         # Crea el objeto Domain asociado al tenant recién creado
         Domain.objects.create(
