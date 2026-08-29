@@ -14,7 +14,7 @@ MODULE_NAME = 'Clientes'
 
 class ClientListView(GroupPermissionMixin, TemplateView):
     template_name = 'client/list.html'
-    permission_required = 'view_client'
+    permission_required = 'pos.view_client'
 
     def post(self, request, *args, **kwargs):
         data = {}
@@ -45,7 +45,7 @@ class ClientCreateView(GroupPermissionMixin, CreateView):
     model = Client
     form_class = ClientForm
     success_url = reverse_lazy('client_list')
-    permission_required = 'add_client'
+    permission_required = 'pos.add_client'
 
     def post(self, request, *args, **kwargs):
         data = {}
@@ -93,7 +93,7 @@ class ClientUpdateView(GroupPermissionMixin, UpdateView):
     model = Client
     form_class = ClientForm
     success_url = reverse_lazy('client_list')
-    permission_required = 'change_client'
+    permission_required = 'pos.change_client'
 
     def dispatch(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -146,7 +146,7 @@ class ClientDeleteView(GroupPermissionMixin, DeleteView):
     model = Client
     template_name = 'delete.html'
     success_url = reverse_lazy('client_list')
-    permission_required = 'delete_client'
+    permission_required = 'pos.delete_client'
 
     def post(self, request, *args, **kwargs):
         data = {}

@@ -28,6 +28,22 @@ class GroupPermissionMixin(GroupSessionMixin, object):
             permissions = list(self.permission_required)
         return permissions
 
+    @staticmethod
+    def has_permission(group, permission):
+        """Comprueba un permiso de grupo, admitiendo ``app_label.codename``.
+
+        Los codenames no son globalmente únicos: por ejemplo, ``tenants.Client``
+        y ``pos.Client`` pueden tener ambos ``view_client``. Para los permisos
+        calificados se debe comprobar también la aplicación que los define.
+        """
+        if '.' in permission:
+            app_label, codename = permission.split('.', 1)
+            return group.permissions.filter(
+                content_type__app_label=app_label,
+                codename=codename,
+            ).exists()
+        return group.permissions.filter(codename=permission).exists()
+
     def get_last_url(self):
         request = get_current_request()
         if 'url_last' in request.session:
@@ -41,8 +57,7 @@ class GroupPermissionMixin(GroupSessionMixin, object):
             return super().get(request, *args, **kwargs)
         group = request.session.get('group')
         permission_list = self.get_permissions()
-        queryset = group.permissions.filter(codename__in=permission_list)
-        if queryset.count() != len(permission_list):
+        if not group or not all(self.has_permission(group, permission) for permission in permission_list):
             messages.error(request, 'Tu perfil no cuenta con el permiso necesario para ingresar')
             return HttpResponseRedirect(self.get_last_url())
         request.session['url_last'] = request.path

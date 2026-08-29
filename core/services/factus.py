@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 # Estas credenciales se deben mover a variables de entorno antes de desplegar a
 # producción. Se conservan temporalmente aquí para no interrumpir la integración
 # ya configurada en este proyecto.
-FACTUS_API_URL = "https://api.factus.com.co"
-CLIENT_ID = "a2548925-3bca-4186-95da-487fab9ce2a8"
-CLIENT_SECRET = "aOIEg9SB8Lqn9Kqu8Yz3UZiIUg76HGxHylAF1LTl"
+FACTUS_API_URL = "https://api-sandbox.factus.com.co"
+CLIENT_ID = "a2548812-8575-447e-a61d-91dc7bd0e2bd"
+CLIENT_SECRET = " GD9Kb7AeydRmdox3DlZMs0Le5WR8ghg84VQhLad0"
 USERNAME = "fexequialesescobar@hotmail.com"
 PASSWORD = "11426546"
 
