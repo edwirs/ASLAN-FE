@@ -1,4 +1,5 @@
 import json
+import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import Group
@@ -23,6 +24,7 @@ from core.services.factus import create_invoice, get_numbering_ranges, download_
 from core.services.services import send_sale_electronic_invoice_email, generate_qr_base64_from_url
 
 MODULE_NAME = 'Ventas FE'
+logger = logging.getLogger(__name__)
 
 
 class SaleFeListView(GroupPermissionMixin, FormView):
@@ -105,6 +107,8 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
         data = {}
         try:
             if action == 'add':
+                # La venta local debe confirmarse antes de interactuar con servicios
+                # externos. Así, una caída de Factus o del correo no la revierte.
                 with transaction.atomic():
                     company = Company.objects.first()
                     iva = float(company.iva) / 100 if company and company.iva else 0.0
@@ -137,6 +141,7 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
                     sale.propina = float(request.POST.get('propina', 0) or 0)
                     sale.description = request.POST.get('description', '').strip()
                     sale.is_electronicinvoice = True
+                    sale.factus_status = 'pending'
                     sale.save()
 
                     # Guardar detalles de productos
@@ -165,60 +170,94 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
                     sale.calculate_detail()
                     sale.calculate_invoice()
 
-                    target_email = request.POST.get('client_email', '')
-                    
-                    # Capturamos el numbering_range_id enviado desde el campo oculto del formulario
-                    numbering_range_id = request.POST.get('numbering_range_id')
-                    if not numbering_range_id:
-                        numbering_range_id = 8
-                    else:
-                        numbering_range_id = int(numbering_range_id)
-
-                    # Enviar a Factus pasando el numbering_range_id optimizado
-                    factus_response = create_invoice(sale, numbering_range_id=numbering_range_id, target_email=target_email)
-                    if "error" in factus_response:
-                        # Al salir del bloque atomic se revierte venta, detalle e inventario.
-                        raise ValidationError(factus_response.get("error"))
-
-                    data_resp = factus_response.get("data", {})
-                    # Factus v2 retorna los datos de la factura directamente en
-                    # ``data``. Se conserva el fallback para respuestas antiguas.
-                    bill_data = data_resp.get("bill", data_resp)
-                    numbering_range = data_resp.get("numbering_range", {})
-                    if not bill_data or not bill_data.get("number"):
-                        raise ValidationError("Factus no devolvió los datos de la factura creada")
-
-                    links_data = bill_data.get("links", {})
-                    sale.factus_invoice_id = bill_data.get("number")
-                    sale.factus_status = bill_data.get("status") or (
-                        "validated" if bill_data.get("is_validated") else "pending"
-                    )
-                    sale.factus_pdf_url = links_data.get("public_url")
-                    sale.factus_cufe = bill_data.get("cufe")
-                    sale.factus_resolution = numbering_range.get("resolution_number")
-                    sale.factus_prefix = numbering_range.get("prefix")
-                    sale.factus_range_from = numbering_range.get("from")
-                    sale.factus_range_to = numbering_range.get("to")
-                    sale.factus_date_from = numbering_range.get("date_from")
-                    sale.factus_date_to = numbering_range.get("date_to")
-                    sale.factus_qr_url = links_data.get("qr")
-                    
-                    sale.save()
-
-                   # CAPTURAR ARCHIVOS ADJUNTOS UNIFICADOS
+                    # Guardar el adjunto junto con la venta local, antes de salir
+                    # de la transacción que confirma venta, detalle e inventario.
                     files_list = request.FILES.getlist('pdf_files')
                     if files_list:
-                        # Si tu modelo Sale tiene un campo individual para respaldo:
                         sale.attachment = files_list[0]
                         sale.save(update_fields=['attachment'])
-                    
-                    # NUEVO: Disparar el servicio de correo electrónico (PDF + XML + Adjunto opcional)
-                    email_result = send_sale_electronic_invoice_email(sale, request=self.request)
 
-                    if not email_result.get("success"):
-                        # Opcional: Puedes loguear el error o mostrar una advertencia sin frenar la venta
-                        logger.warning("No se pudo enviar el correo de la factura: %s", email_result.get("message"))
-                    data = {'print_url': str(reverse_lazy('sale_Fe_admin_print_invoice', kwargs={'pk': sale.id}))}
+                # Desde este punto la venta ya está confirmada en la base local.
+                data = {
+                    'print_url': str(reverse_lazy('sale_Fe_admin_print_invoice', kwargs={'pk': sale.id})),
+                    'warnings': [],
+                }
+                target_email = request.POST.get('client_email', '')
+
+                try:
+                    numbering_range_id = request.POST.get('numbering_range_id')
+                    numbering_range_id = int(numbering_range_id) if numbering_range_id else 8
+                    factus_response = create_invoice(
+                        sale,
+                        numbering_range_id=numbering_range_id,
+                        target_email=target_email,
+                    )
+                    if 'error' in factus_response:
+                        raise ValidationError(factus_response.get('error'))
+
+                    data_resp = factus_response.get('data', {})
+                    # Factus v2 retorna los datos de la factura directamente en
+                    # ``data``. Se conserva el fallback para respuestas antiguas.
+                    bill_data = data_resp.get('bill', data_resp)
+                    numbering_range = data_resp.get('numbering_range', {})
+                    if not bill_data or not bill_data.get('number'):
+                        raise ValidationError('Factus no devolvió los datos de la factura creada')
+                except Exception:
+                    logger.exception('No se pudo facturar la venta local %s en Factus', sale.id)
+                    sale.factus_status = 'error'
+                    sale.save(update_fields=['factus_status'])
+                    data['warnings'].append(
+                        'La venta se guardó, pero no se pudo enviar a Factus. Revise los registros para reintentarla.'
+                    )
+                else:
+                    try:
+                        # La actualización de datos de Factus se confirma antes
+                        # de intentar el correo, para que este nunca dependa de
+                        # Gmail ni deje datos de Factus sin persistir.
+                        with transaction.atomic():
+                            links_data = bill_data.get('links', {})
+                            sale.factus_invoice_id = bill_data.get('number')
+                            sale.factus_status = bill_data.get('status') or (
+                                'validated' if bill_data.get('is_validated') else 'pending'
+                            )
+                            sale.factus_pdf_url = links_data.get('public_url')
+                            sale.factus_cufe = bill_data.get('cufe')
+                            sale.factus_resolution = numbering_range.get('resolution_number')
+                            sale.factus_prefix = numbering_range.get('prefix')
+                            sale.factus_range_from = numbering_range.get('from')
+                            sale.factus_range_to = numbering_range.get('to')
+                            sale.factus_date_from = numbering_range.get('date_from')
+                            sale.factus_date_to = numbering_range.get('date_to')
+                            sale.factus_qr_url = links_data.get('qr')
+                            sale.save()
+                    except Exception:
+                        logger.exception(
+                            'Factus creó la factura de la venta %s, pero no se pudo guardar su respuesta localmente',
+                            sale.id,
+                        )
+                        data['warnings'].append(
+                            'La venta se guardó y Factus respondió, pero no se pudieron guardar sus datos localmente. Revise los registros.'
+                        )
+                    else:
+                        # El servicio captura sus propios errores, pero se protege
+                        # también esta llamada para que Gmail jamás revierta la venta.
+                        try:
+                            email_result = send_sale_electronic_invoice_email(sale, request=request)
+                        except Exception:
+                            logger.exception('Error inesperado al enviar el correo de la factura %s', sale.id)
+                            data['warnings'].append(
+                                'La venta y la factura electrónica se guardaron, pero el correo no pudo enviarse.'
+                            )
+                        else:
+                            if not email_result.get('success'):
+                                logger.warning(
+                                    'No se pudo enviar el correo de la factura %s: %s',
+                                    sale.id,
+                                    email_result.get('message'),
+                                )
+                                data['warnings'].append(
+                                    'La venta y la factura electrónica se guardaron, pero el correo no pudo enviarse.'
+                                )
 
             elif action == 'search_products':
                 ids = json.loads(request.POST.get('ids', '[]'))

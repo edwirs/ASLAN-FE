@@ -4,7 +4,7 @@ import logging
 import requests
 import qrcode
 import base64
-from xhtml2pdf import pisa
+from mimetypes import guess_type
 from io import BytesIO
 from django.conf import settings
 from django.core.mail import EmailMessage
@@ -13,6 +13,29 @@ from core.services.factus import download_invoice_xml, download_invoice_pdf
 from core.pos.models import Company
 
 logger = logging.getLogger(__name__)
+
+
+def image_to_data_uri(image_field):
+    """Convierte una imagen local a data URI para el PDF de Chromium."""
+    if not image_field:
+        return None
+
+    try:
+        image_field.open('rb')
+        try:
+            content = image_field.read()
+        finally:
+            image_field.close()
+
+        if not content:
+            return None
+
+        mime_type = guess_type(image_field.name)[0] or 'application/octet-stream'
+        encoded_content = base64.b64encode(content).decode('ascii')
+        return f'data:{mime_type};base64,{encoded_content}'
+    except Exception:
+        logger.exception('No se pudo preparar la imagen para el PDF')
+        return None
 
 def send_sale_electronic_invoice_email(sale, request=None):
     if sale.email_sent_count >= 4:
@@ -57,14 +80,19 @@ def send_sale_electronic_invoice_email(sale, request=None):
                     mimetype="application/xml"
                 )
 
-        # 2. Adjuntar PDF obtenido desde el endpoint oficial de Factus
+        # 2. Generar el PDF de la factura con Chromium. No se envía un correo
+        # incompleto si el motor de PDF no está disponible.
         pdf_content = generate_internal_sale_pdf(sale, request=request)
-        if pdf_content:
-            email.attach(
-                filename=f"factura_{sale.factus_invoice_id or sale.id}.pdf",
-                content=pdf_content,
-                mimetype="application/pdf"
-            )
+        if not pdf_content:
+            return {
+                "success": False,
+                "message": "No fue posible generar el PDF de la factura para el correo.",
+            }
+        email.attach(
+            filename=f"factura_{sale.factus_invoice_id or sale.id}.pdf",
+            content=pdf_content,
+            mimetype="application/pdf"
+        )
 
         # 3. Adjuntar múltiples archivos enviados desde el formulario
         if request and hasattr(request, 'FILES') and 'pdf_files' in request.FILES:
@@ -102,9 +130,11 @@ def send_sale_electronic_invoice_email(sale, request=None):
 
 def generate_internal_sale_pdf(sale, request=None):
     """
-    Renderiza la plantilla HTML de la factura de la venta y la convierte a PDF en memoria.
+    Renderiza la factura con Chromium y devuelve el PDF en memoria.
     """
     try:
+        from playwright.sync_api import sync_playwright
+
         # 1. BÚSQUEDA BLINDADA DE LA COMPAÑÍA
         company = None
         
@@ -121,7 +151,7 @@ def generate_internal_sale_pdf(sale, request=None):
         c_ruc = company.ruc if company else "N/A"
         c_email = company.email if company else ""
         c_address = company.address if company else ""
-        c_image = company.image.path if (company and company.image and hasattr(company.image, 'path')) else None
+        c_image = image_to_data_uri(company.image) if company and company.image else None
 
         # Generar la imagen QR en Base64 usando la URL que guardaste de Factus
         qr_data_to_encode = sale.factus_qr_url if sale.factus_qr_url else sale.factus_cufe
@@ -140,18 +170,21 @@ def generate_internal_sale_pdf(sale, request=None):
             'qr_base64': qr_base64,
         }
         
-        # Renderiza tu plantilla HTML existente (reemplaza 'pos/sale/print_invoice.html' 
-        # por la ruta real de la plantilla que usa tu iframe de impresión)
         html_string = render_to_string('salefe/format/invoice.html', context, request=request)
-        
-        result = BytesIO()
-        pdf = pisa.pisaDocument(BytesIO(html_string.encode("UTF-8")), result)
-        
-        if pdf.err:
-            return None
-            
-        return result.getvalue()
-    except Exception as e:
+
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
+            try:
+                page = browser.new_page()
+                page.emulate_media(media='print')
+                page.set_content(html_string, wait_until='load')
+                return page.pdf(
+                    print_background=True,
+                    prefer_css_page_size=True,
+                )
+            finally:
+                browser.close()
+    except Exception:
         logger.exception("Error generando el PDF interno para la venta %s", sale.id)
         return None
 

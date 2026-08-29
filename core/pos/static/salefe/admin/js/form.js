@@ -780,6 +780,11 @@ $(function () {
         var args = {
             'params': params,
             'success': function (request) {
+                if (request.warnings) {
+                    request.warnings.forEach(function (warning) {
+                        toastr.warning(warning);
+                    });
+                }
                 dialog_action({
                     'content': '¿Desea imprimir la boleta de venta?',
                     'success': function () {
