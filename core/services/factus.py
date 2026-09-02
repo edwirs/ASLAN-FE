@@ -169,6 +169,9 @@ def create_invoice(sale, numbering_range_id, target_email=None):
         "customer": customer,
         "items": items,
     }
+    observation = (sale.description or "").strip()
+    if observation:
+        payload["observation"] = observation
 
     try:
         response = requests.post(
