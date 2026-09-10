@@ -6,6 +6,7 @@ from core.pos.views.company.views import *
 from core.pos.views.product.views import *
 from core.pos.views.sale.views import *
 from core.pos.views.salefe.views import *
+from core.pos.views.creditnotefe.views import *
 from core.pos.views.price.views import *
 from core.pos.views.buy.views import *
 from core.pos.views.provider.views import *
@@ -63,8 +64,14 @@ urlpatterns = [
     path('salefe/admin/delete/<int:pk>/', SaleFeDeleteView.as_view(), name='sale_Fe_admin_delete'),
     path('salefe/admin/delivered/<int:pk>/', SaleFeDeliveredUpdateView.as_view(), name='sale_Fe_admin_delivered'),
     path('salefe/admin/print/invoice/<int:pk>/', SaleFePrintInvoiceView.as_view(), name='sale_Fe_admin_print_invoice'),
+    path('salefe/admin/download/pdf/<int:pk>/', SaleFeDownloadPdfView.as_view(), name='sale_Fe_admin_download_pdf'),
     path('salefe/admin/get_sale/<int:pk>/', get_sale_Fe, name='get_sale_Fe'),
     path('salefe/admin/update_sale/<int:pk>/', update_sale_Fe, name='update_sale_Fe'),
+    # nota credito electronica
+    path('creditnotefe/admin/', CreditNoteFeListView.as_view(), name='credit_note_Fe_admin_list'),
+    path('creditnotefe/admin/add/', CreditNoteFeCreateView.as_view(), name='credit_note_Fe_admin_create'),
+    path('creditnotefe/admin/delete/<int:pk>/', CreditNoteFeDeleteView.as_view(), name='credit_note_Fe_admin_delete'),
+    path('creditnotefe/admin/print/<int:pk>/', CreditNoteFePrintView.as_view(), name='credit_note_Fe_admin_print'),
     # price
     path('price/admin/', PriceListView.as_view(), name='price_admin_list'),
     path('price/admin/add/', PriceCreateView.as_view(), name='price_admin_create'),

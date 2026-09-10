@@ -81,9 +81,8 @@ def get_numbering_ranges():
         return {"error": "No fue posible consultar los rangos de Factus", "detail": str(exc)}
 
 
-def create_invoice(sale, numbering_range_id, target_email=None):
-    """Construye y valida una factura estándar (operación 10) en Factus v2."""
-    client = sale.client
+def _build_customer_payload(client, target_email=None):
+    """Construye el objeto ``customer`` que exige Factus a partir de un Client."""
     document_code = str(getattr(client.document_type, "code", "") or "31")
     is_nit = document_code == "31"
     is_company = client.person_type == "juridica"
@@ -109,18 +108,24 @@ def create_invoice(sale, numbering_range_id, target_email=None):
         customer["trade_name"] = client.commercial_name or client.names
     if is_nit:
         customer["dv"] = _nit_dv(customer["identification"])
+    return customer
 
+
+def _build_items_payload(details, global_discount_rate, tax_rate):
+    """Construye el array ``items`` que exige Factus a partir de un queryset de
+    detalles (SaleDetail o CreditNoteDetail), ambos con los mismos campos
+    ``product``, ``dscto``, ``cant`` y ``price``."""
     items = []
-    for detail in sale.saledetail_set.select_related("product"):
+    global_discount_rate = Decimal(str(global_discount_rate or 0))
+    for detail in details:
         product = detail.product
         line_discount_rate = Decimal(str(detail.dscto or 0))
-        global_discount_rate = Decimal(str(sale.dscto or 0))
         effective_discount_rate = Decimal("1") - (
             (Decimal("1") - line_discount_rate) * (Decimal("1") - global_discount_rate)
         )
-        tax_rate = Decimal(str(sale.iva or 0)) * 100
-        tax = {"code": "01", "rate": _as_money(tax_rate)}
-        if not product.with_tax or tax_rate == 0:
+        line_tax_rate = Decimal(str(tax_rate or 0))
+        tax = {"code": "01", "rate": _as_money(line_tax_rate)}
+        if not product.with_tax or line_tax_rate == 0:
             tax.update({"rate": "0.00", "is_excluded": True})
 
         items.append({
@@ -133,6 +138,18 @@ def create_invoice(sale, numbering_range_id, target_email=None):
             "standard_code": "999",
             "taxes": [tax],
         })
+    return items
+
+
+def create_invoice(sale, numbering_range_id, target_email=None):
+    """Construye y valida una factura estándar (operación 10) en Factus v2."""
+    client = sale.client
+    customer = _build_customer_payload(client, target_email)
+    items = _build_items_payload(
+        sale.saledetail_set.select_related("product"),
+        sale.dscto,
+        Decimal(str(sale.iva or 0)) * 100,
+    )
 
     payment_form = "2" if sale.typemethods == "credit" else "1"
     payment_detail = {
@@ -221,22 +238,184 @@ def download_invoice_xml(bill_number):
 
 def download_invoice_pdf(invoice_number):
     """
-    Consume el endpoint de Factus para descargar el PDF binario de la factura.
+    Descarga el PDF de una factura (``GET /v2/bills/:number/download-pdf``).
+    Al igual que en notas crédito, Factus devuelve el binario codificado en
+    Base64 dentro de ``pdf_base_64_encoded``, no el binario directo.
     """
     try:
         response = requests.get(
             f"{FACTUS_API_URL}/v2/bills/{invoice_number}/download-pdf",
             headers={
                 "Authorization": f"Bearer {get_token()}",
-                "Accept": "application/pdf",
+                "Accept": "application/json",
             },
             timeout=REQUEST_TIMEOUT,
         )
         if not response.ok:
             return _error_response(response)
 
-        # Si Factus responde directamente con el binario del PDF
-        return response.content
-    except Exception as exc:
+        body = response.json()
+        encoded_pdf = body.get("data", body).get("pdf_base_64_encoded")
+        if not encoded_pdf:
+            return {"error": "Factus no devolvió el PDF de la factura"}
+        return base64.b64decode(encoded_pdf)
+    except (requests.RequestException, ValueError, KeyError) as exc:
         logger.exception("No fue posible descargar el PDF de la factura %s desde Factus", invoice_number)
+        return {"error": "No fue posible descargar el PDF", "detail": str(exc)}
+
+
+def create_credit_note(credit_note, numbering_range_id, target_email=None):
+    """Construye y valida una nota crédito en Factus v2 (``POST /v2/credit-notes/validate``).
+
+    ``credit_note.operation_type`` define si referencia una factura ('20') o no ('22').
+    Ver: https://developers.factus.com.co/notas-credito/descripcion-de-campos/
+    """
+    client = credit_note.client
+    customer = _build_customer_payload(client, target_email)
+    items = _build_items_payload(
+        credit_note.creditnotedetail_set.select_related("product"),
+        credit_note.dscto,
+        Decimal(str(credit_note.iva or 0)) * 100,
+    )
+
+    payment_form = "2" if credit_note.typemethods == "credit" else "1"
+    payment_detail = {
+        "payment_form": payment_form,
+        "payment_method_code": "10" if credit_note.paymentmethod == "cash" else "42",
+        "reference_code": f"nc-{credit_note.id}",
+        "amount": _as_money(credit_note.total),
+    }
+    if payment_form == "2":
+        due_date = credit_note.expiration_date
+        if isinstance(due_date, str):
+            try:
+                due_date = date.fromisoformat(due_date)
+            except ValueError:
+                due_date = None
+        today = timezone.localdate()
+        if not due_date:
+            return {"error": "La nota crédito a crédito requiere fecha de vencimiento"}
+        if due_date <= today:
+            return {
+                "error": "La fecha de vencimiento debe ser posterior a la fecha actual",
+                "detail": {"payment_details.0.due_date": ["Seleccione al menos el día siguiente."]},
+            }
+        payment_detail["due_date"] = due_date.isoformat()
+
+    payload = {
+        "reference_code": str(credit_note.id),
+        "correction_concept_code": str(credit_note.correction_concept),
+        "customization_id": str(credit_note.operation_type),
+        "payment_details": [payment_detail],
+        "customer": customer,
+        "items": items,
+    }
+    if numbering_range_id:
+        # Factus solo lo exige cuando hay múltiples rangos activos; si se omite
+        # usa el único rango disponible por defecto.
+        payload["numbering_range_id"] = int(numbering_range_id)
+
+    if credit_note.operation_type == "20":
+        # Nota crédito con referencia: obligatorio el número de la factura.
+        if not credit_note.reference_bill_number:
+            return {"error": "Debe indicar el número de la factura a referenciar"}
+        payload["bill_number"] = credit_note.reference_bill_number
+    else:
+        # Nota crédito sin referencia: Factus exige el periodo de facturación.
+        if not credit_note.billing_period_start_date or not credit_note.billing_period_end_date:
+            return {"error": "Debe indicar el periodo de facturación de la nota crédito"}
+        payload["billing_period"] = {
+            "start_date": credit_note.billing_period_start_date.isoformat(),
+            "start_time": "00:00:00",
+            "end_date": credit_note.billing_period_end_date.isoformat(),
+            "end_time": "23:59:59",
+        }
+
+    observation = (credit_note.description or "").strip()
+    if observation:
+        payload["observation"] = observation
+
+    try:
+        response = requests.post(
+            f"{FACTUS_API_URL}/v2/credit-notes/validate",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {get_token()}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        try:
+            body = response.json()
+        except ValueError:
+            body = response.text
+
+        if not response.ok or not isinstance(body, dict) or body.get("status") == "Validation error":
+            return _error_response(response, body)
+        return body
+    except (requests.RequestException, KeyError) as exc:
+        logger.exception("No fue posible enviar la nota crédito %s a Factus", credit_note.id)
+        return {"error": "No fue posible comunicarse con Factus", "detail": str(exc)}
+
+
+def get_credit_note(number):
+    """Consulta una nota crédito específica (``GET /v2/credit-notes/:number``)."""
+    try:
+        response = requests.get(
+            f"{FACTUS_API_URL}/v2/credit-notes/{number}",
+            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            return _error_response(response)
+        return response.json()
+    except (requests.RequestException, ValueError) as exc:
+        logger.exception("No fue posible consultar la nota crédito %s en Factus", number)
+        return {"error": "No fue posible consultar la nota crédito", "detail": str(exc)}
+
+
+def download_credit_note_xml(number):
+    """Descarga el XML de una nota crédito validada (``GET /v2/credit-notes/:number/download-xml``)."""
+    try:
+        response = requests.get(
+            f"{FACTUS_API_URL}/v2/credit-notes/{number}/download-xml",
+            headers={
+                "Authorization": f"Bearer {get_token()}",
+                "Accept": "application/json",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            return _error_response(response)
+        return response.content
+    except (requests.RequestException, ValueError) as exc:
+        logger.exception("No fue posible descargar el XML de la nota crédito %s desde Factus", number)
+        return {"error": "No fue posible descargar el XML", "detail": str(exc)}
+
+
+def download_credit_note_pdf(number):
+    """
+    Descarga el PDF de una nota crédito (``GET /v2/credit-notes/:number/download-pdf``).
+    Factus devuelve el binario codificado en Base64 dentro de ``pdf_base_64_encoded``.
+    """
+    try:
+        response = requests.get(
+            f"{FACTUS_API_URL}/v2/credit-notes/{number}/download-pdf",
+            headers={
+                "Authorization": f"Bearer {get_token()}",
+                "Accept": "application/json",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            return _error_response(response)
+
+        body = response.json()
+        encoded_pdf = body.get("data", body).get("pdf_base_64_encoded")
+        if not encoded_pdf:
+            return {"error": "Factus no devolvió el PDF de la nota crédito"}
+        return base64.b64decode(encoded_pdf)
+    except (requests.RequestException, ValueError, KeyError) as exc:
+        logger.exception("No fue posible descargar el PDF de la nota crédito %s desde Factus", number)
         return {"error": "No fue posible descargar el PDF", "detail": str(exc)}

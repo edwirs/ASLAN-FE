@@ -35,28 +35,61 @@ var sale = {
                 {data: "factus_invoice_id"},
                 {data: "client.names"},
                 {data: "date_joined"},
-                {data: "total"},    
+                {data: "total"},
                 {data: "paymentmethod.name"},
+                {data: "factus_status"},
                 {data: "id"},
             ],
             columnDefs: [
                 {
-                    targets: [-3],
+                    targets: [-4],
                     class: 'text-center',
                     render: function (data, type, row) {
                         return '$' + parseFloat(data).toLocaleString('es-CL');
                     }
                 },
                 {
+                    targets: [-3],
+                    class: 'text-center',
+                },
+                {
                     targets: [-2],
                     class: 'text-center',
+                    render: function (data, type, row) {
+                        var dianIcon;
+                        if (row.factus_cufe) {
+                            dianIcon = '<span class="status-chip status-success" data-bs-toggle="tooltip" title="Validada por la DIAN"><i class="fas fa-check"></i></span>';
+                        } else if (row.factus_status === 'error') {
+                            dianIcon = '<span class="status-chip status-danger" data-bs-toggle="tooltip" title="Rechazada por Factus / DIAN"><i class="fas fa-times"></i></span>';
+                        } else {
+                            dianIcon = '<span class="status-chip status-warning" data-bs-toggle="tooltip" title="Pendiente de validación"><i class="fas fa-clock"></i></span>';
+                        }
+
+                        var sentCount = parseInt(row.email_sent_count) || 0;
+                        var emailIcon;
+                        if (sentCount === 0) {
+                            emailIcon = '<span class="status-chip status-muted" data-bs-toggle="tooltip" title="El correo aún no se ha enviado"><i class="fas fa-envelope"></i></span>';
+                        } else if (sentCount >= 4) {
+                            emailIcon = '<span class="status-chip status-warning" data-bs-toggle="tooltip" title="Correo enviado (' + sentCount + '/4) — límite alcanzado"><i class="fas fa-envelope"></i></span>';
+                        } else {
+                            emailIcon = '<span class="status-chip status-success" data-bs-toggle="tooltip" title="Correo enviado exitosamente (' + sentCount + '/4)"><i class="fas fa-envelope"></i></span>';
+                        }
+
+                        return '<div class="d-flex justify-content-center align-items-center gap-2">' + dianIcon + emailIcon + '</div>';
+                    }
                 },
                 {
                     targets: [-1],
                     class: 'text-center',
                     render: function (data, type, row) {
-                        var buttons = '<a rel="detail" data-bs-toggle="tooltip" title="Detalle" class="btn btn-success btn-sm rounded-pill"><i class="fas fa-boxes"></i></a> ';
-                        buttons += '<a href="#" rel="print" data-id="' + row.id + '" data-bs-toggle="tooltip" title="Imprimir" class="btn btn-secondary btn-sm rounded-pill"><i class="fas fa-print"></i></a>';                        
+                        var buttons = '<div class="dropdown d-inline-block">';
+                        buttons += '<button class="btn btn-actions-dots" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-ellipsis-h"></i></button>';
+                        buttons += '<ul class="dropdown-menu dropdown-menu-end actions-dropdown-menu">';
+                        buttons += '<li><a class="dropdown-item" href="#" rel="print" data-id="' + row.id + '"><i class="fas fa-print text-secondary"></i>Imprimir</a></li>';
+                        buttons += '<li><a class="dropdown-item" href="#" rel="view_invoice" data-url="' + (row.factus_pdf_url || '') + '"><i class="fas fa-eye text-info"></i>Ver factura</a></li>';
+                        buttons += '<li><a class="dropdown-item" href="#" rel="resend_email" data-id="' + row.id + '"><i class="fas fa-envelope text-primary"></i>Enviar factura al correo</a></li>';
+                        buttons += '<li><a class="dropdown-item" href="#" rel="download_pdf" data-id="' + row.id + '"><i class="fas fa-file-pdf text-danger"></i>Descargar PDF</a></li>';
+                        buttons += '</ul></div>';
 
                         return buttons;
                     }
@@ -84,55 +117,6 @@ $(function () {
 
     $('#data tbody')
         .off()
-        .on('click', 'a[rel="detail"]', function () {
-            $('.tooltip').remove();
-            var tr = tblSale.cell($(this).closest('td, li')).index();
-            var row = tblSale.row(tr.row).data();
-            $('#tblProducts').DataTable({
-                autoWidth: false,
-                destroy: true,
-                ajax: {
-                    url: pathname,
-                    type: 'POST',
-                    headers: {
-                        'X-CSRFToken': csrftoken
-                    },
-                    data: {
-                        'action': 'search_detail_products',
-                        'id': row.id
-                    },
-                    dataSrc: ""
-                },
-                columns: [
-                    {data: "product.short_name"},
-                    {data: "price_with_vat"},
-                    {data: "cant"},
-                    {data: "subtotal"},
-                    {data: "total_dscto"},
-                    {data: "total"},
-                ],
-                columnDefs: [
-                    {
-                        targets: [-1, -2, -3, -5],
-                        class: 'text-center',
-                        render: function (data, type, row) {
-                            return '$' + parseFloat(data).toLocaleString('es-CL');
-                        }
-                    },
-                    {
-                        targets: [-4],
-                        class: 'text-center',
-                        render: function (data, type, row) {
-                            return data;
-                        }
-                    }
-                ],
-                initComplete: function (settings, json) {
-
-                }
-            });
-            $('#myModalDetail').modal('show');
-        })
         .on('click', 'a[rel="myModalEdit"]', function () {
             $('.tooltip').remove();
 
@@ -181,7 +165,89 @@ $(function () {
                 };
                 window.addEventListener("afterprint", afterPrint);
             };
+        })
+        .on('click', 'a[rel="view_invoice"]', function (e) {
+            e.preventDefault();
+            $('.tooltip').remove();
+
+            var url = $(this).data('url');
+            if (!url) {
+                return message_error('Esta factura aún no ha sido validada por Factus');
+            }
+            window.open(url, '_blank');
+        })
+        .on('click', 'a[rel="download_pdf"]', function (e) {
+            e.preventDefault();
+            $('.tooltip').remove();
+
+            let id = $(this).data('id');
+            window.location.href = pathname + 'download/pdf/' + id + '/';
+        })
+        .on('click', 'a[rel="resend_email"]', function (e) {
+            e.preventDefault();
+            $('.tooltip').remove();
+
+            let id = $(this).data('id');
+            $('#myModalResendEmail').data('sale-id', id);
+            $.ajax({
+                url: pathname,
+                type: 'POST',
+                headers: {'X-CSRFToken': csrftoken},
+                data: {action: 'get_client_emails', id: id},
+                dataType: 'json',
+                success: function (data) {
+                    if (data.error) {
+                        return message_error(data.error);
+                    }
+                    $('#resendClientName').val(data.client_name);
+                    var $list = $('#resendEmailList').empty();
+                    if (!data.emails.length) {
+                        $list.append('<p class="text-muted mb-0">Este cliente no tiene correos electrónicos registrados.</p>');
+                        $('#btnConfirmResendEmail').prop('disabled', true);
+                    } else {
+                        $('#btnConfirmResendEmail').prop('disabled', false);
+                        data.emails.forEach(function (item, index) {
+                            $list.append(
+                                '<div class="form-check">' +
+                                '<input class="form-check-input" type="radio" name="resend_email_option" id="resendEmailOpt' + index + '" value="' + item.value + '" ' + (index === 0 ? 'checked' : '') + '>' +
+                                '<label class="form-check-label" for="resendEmailOpt' + index + '">' + item.label + '</label>' +
+                                '</div>'
+                            );
+                        });
+                    }
+                    $('#myModalResendEmail').modal('show');
+                },
+                error: function () {
+                    message_error('Ocurrió un error al consultar los correos del cliente');
+                }
+            });
         });
+
+    $('#btnConfirmResendEmail').on('click', function () {
+        var id = $('#myModalResendEmail').data('sale-id');
+        var email = $('input[name="resend_email_option"]:checked').val();
+        if (!email) {
+            return message_error('Seleccione un correo de destino');
+        }
+        $.ajax({
+            url: pathname,
+            type: 'POST',
+            headers: {'X-CSRFToken': csrftoken},
+            data: {action: 'resend_email', id: id, email: email},
+            dataType: 'json',
+            success: function (data) {
+                if (data.error) {
+                    return message_error(data.error);
+                }
+                $('#myModalResendEmail').modal('hide');
+                toastr.success(data.message || 'Correo reenviado exitosamente');
+                sale.list(false);
+            },
+            error: function () {
+                message_error('Ocurrió un error al reenviar el correo');
+            }
+        });
+    });
 
     // Guardar cambios al dar clic en "Guardar"
     $(document).on('click', '#btnSaveEdit', function () {
@@ -225,7 +291,8 @@ $(function () {
 
     input_date_range.daterangepicker({
                 language: 'auto',
-                startDate: new Date(),
+                startDate: moment().subtract(6, 'days'),
+                endDate: moment(),
                 locale: {
                     format: 'YYYY-MM-DD',
                 },
@@ -290,8 +357,8 @@ $(function () {
         language: 'es'
     });
 
-    select_transfermethods.parent().hide(); 
-    
+    select_transfermethods.parent().hide();
+
     select_paymentmethod.on('change', function(){
         const selectedValue = $(this).val();
         select_transfermethods.empty();
@@ -335,7 +402,7 @@ $(function () {
         .on('keypress', function (e) {
             return validate_text_box({'event': e, 'type': 'decimals'});
         });
-    
+
     input_propina
         .TouchSpin({
             min: 0.00,

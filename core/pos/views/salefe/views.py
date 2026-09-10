@@ -20,7 +20,7 @@ from core.pos.utilities import printer
 from core.reports.forms import ReportForm
 from core.security.mixins import GroupPermissionMixin
 from core.pos.choices import PAYMENTMETHODS, TRANSFERMETHODS
-from core.services.factus import create_invoice, get_numbering_ranges, download_invoice_xml
+from core.services.factus import create_invoice, get_numbering_ranges, download_invoice_xml, download_invoice_pdf
 from core.services.services import send_sale_electronic_invoice_email, generate_qr_base64_from_url
 
 MODULE_NAME = 'Ventas FE'
@@ -49,12 +49,40 @@ class SaleFeListView(GroupPermissionMixin, FormView):
                 data = []
                 for i in SaleDetail.objects.filter(sale_id=request.POST.get('id')):
                     data.append(i.toJSON())
+            elif action == 'get_client_emails':
+                sale = Sale.objects.select_related('client').get(pk=request.POST.get('id'))
+                emails = []
+                if sale.client.email:
+                    emails.append({
+                        'value': sale.client.email,
+                        'label': f"Principal — {sale.client.email}",
+                    })
+                for contact in sale.client.contacts.exclude(email='').exclude(email__isnull=True):
+                    label = contact.names
+                    if contact.position:
+                        label += f" ({contact.position})"
+                    emails.append({'value': contact.email, 'label': f"{label} — {contact.email}"})
+                data = {
+                    'client_name': sale.client.get_full_name(),
+                    'emails': emails,
+                }
+            elif action == 'resend_email':
+                sale = Sale.objects.get(pk=request.POST.get('id'))
+                target_email = request.POST.get('email', '').strip()
+                if not target_email:
+                    data['error'] = 'Debe seleccionar un correo de destino'
+                else:
+                    result = send_sale_electronic_invoice_email(sale, request=request, target_email=target_email)
+                    if result.get('success'):
+                        data = {'success': True, 'message': result.get('message')}
+                    else:
+                        data['error'] = result.get('message')
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
             data['error'] = str(e)
         return HttpResponse(json.dumps(data), content_type='application/json')
-    
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['title'] = 'Listado de Ventas'
@@ -436,3 +464,22 @@ class SaleFePrintInvoiceView(LoginRequiredMixin, View):
             return render(request, 'salefe/format/invoice.html', context)
         except Sale.DoesNotExist:
             return HttpResponseRedirect(settings.LOGIN_REDIRECT_URL)
+
+
+class SaleFeDownloadPdfView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        try:
+            sale = Sale.objects.get(id=self.kwargs['pk'])
+            if not sale.factus_invoice_id:
+                return HttpResponse('Esta factura aún no ha sido validada por Factus', status=400)
+
+            content = download_invoice_pdf(sale.factus_invoice_id)
+            if not content or isinstance(content, dict):
+                message = content.get('error') if isinstance(content, dict) else 'No fue posible descargar el PDF'
+                return HttpResponse(message, status=502)
+
+            response = HttpResponse(content, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="factura_{sale.factus_invoice_id}.pdf"'
+            return response
+        except Sale.DoesNotExist:
+            return HttpResponse('La venta no existe', status=404)

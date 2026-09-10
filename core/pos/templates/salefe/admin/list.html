@@ -17,6 +17,80 @@
     <link rel="stylesheet" href="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.css' %}">
     <!-- Toastr JS -->
     <script src="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.js' %}"></script>
+
+    <style>
+        /* Botón "..." de acciones */
+        .btn-actions-dots {
+            box-sizing: border-box !important;
+            width: 34px !important;
+            height: 34px !important;
+            min-width: 34px !important;
+            max-width: 34px !important;
+            padding: 0 !important;
+            display: inline-flex !important;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50% !important;
+            border: 1px solid #dee2e6;
+            background-color: #fff;
+            color: #6c757d;
+            font-size: 1rem;
+            line-height: 1 !important;
+        }
+        .btn-actions-dots::after {
+            display: none !important;
+        }
+        .btn-actions-dots:hover,
+        .btn-actions-dots:focus {
+            background-color: #f1f3f5;
+            color: #495057;
+            border-color: #ced4da;
+        }
+
+        /* Menú desplegable de acciones */
+        .actions-dropdown-menu {
+            padding: 0.4rem;
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            min-width: 230px;
+        }
+        .actions-dropdown-menu .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.55rem 0.65rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            color: #343a40;
+        }
+        .actions-dropdown-menu .dropdown-item:hover,
+        .actions-dropdown-menu .dropdown-item:focus {
+            background-color: #f1f3f5;
+        }
+        .actions-dropdown-menu .dropdown-item i {
+            width: 18px;
+            text-align: center;
+            font-size: 0.95rem;
+        }
+
+        /* Íconos de la columna Estado */
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            border: 1.5px solid currentColor;
+            font-size: 0.75rem;
+            background-color: #fff;
+        }
+        .status-chip.status-success { color: #198754; }
+        .status-chip.status-warning { color: #fd7e14; }
+        .status-chip.status-danger { color: #dc3545; }
+        .status-chip.status-muted { color: #adb5bd; }
+    </style>
 {% endblock %}
 
 {% block columns %}
@@ -26,34 +100,35 @@
     <th>Fecha de registro</th>
     <th>Total</th>
     <th>Método de pago</th>
+    <th>Estado</th>
     <th>Opciones</th>
 {% endblock %}
 
 {% block javascript_list %}
-    <div class="modal fade" tabindex="-1" id="myModalDetail">
-        <div class="modal-dialog modal-xl">
+    <div class="modal fade" tabindex="-1" id="myModalResendEmail">
+        <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title fw-bold">
-                        <i class="fa fa-search"></i> Detalle de la venta
+                        <i class="fas fa-paper-plane"></i> Reenviar factura electrónica
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <table style="width:100%;" class="table table-bordered table-sm" id="tblProducts">
-                        <thead>
-                        <tr>
-                            <th>Nombre</th>
-                            <th>Precio</th>
-                            <th>Cantidad</th>
-                            <th>Subtotal</th>
-                            <th>Dscto</th>
-                            <th>Total</th>
-                        </tr>
-                        </thead>
-                        <tbody>
-                        </tbody>
-                    </table>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Cliente:</label>
+                        <input type="text" class="form-control" id="resendClientName" disabled>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-bold">Enviar a:</label>
+                        <div id="resendEmailList"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="btnConfirmResendEmail">
+                        <i class="fas fa-paper-plane"></i> Enviar
+                    </button>
                 </div>
             </div>
         </div>

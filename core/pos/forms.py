@@ -358,6 +358,123 @@ def next_month_day_10():
     future_date = today + timedelta(days=15)
     return future_date.strftime('%Y-%m-%d')
 
+
+class CreditNoteForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['client'].queryset = Client.objects.none()
+
+    class Meta:
+        model = CreditNote
+        fields = '__all__'
+        widgets = {
+            'client': forms.Select(attrs={'class': 'form-select select2'}),
+            'operation_type': forms.Select(attrs={
+                'class': 'select2',
+                'style': 'width: 100%'
+            }),
+            'correction_concept': forms.Select(attrs={
+                'class': 'select2',
+                'style': 'width: 100%'
+            }),
+            'date_joined': forms.DateInput(format='%Y-%m-%d', attrs={
+                'class': 'form-control datetimepicker-input',
+                'id': 'date_joined',
+                'value': datetime.now().strftime('%Y-%m-%d'),
+                'data-toggle': 'datetimepicker',
+                'data-target': '#date_joined',
+                'disabled': True
+            }),
+            'billing_period_start_date': forms.DateInput(format='%Y-%m-%d', attrs={
+                'class': 'form-control datetimepicker-input',
+                'id': 'billing_period_start_date',
+                'data-toggle': 'datetimepicker',
+                'data-target': '#billing_period_start_date',
+                'autocomplete': 'off'
+            }),
+            'billing_period_end_date': forms.DateInput(format='%Y-%m-%d', attrs={
+                'class': 'form-control datetimepicker-input',
+                'id': 'billing_period_end_date',
+                'data-toggle': 'datetimepicker',
+                'data-target': '#billing_period_end_date',
+                'autocomplete': 'off'
+            }),
+            'reference_bill_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'autocomplete': 'off',
+                'placeholder': 'Ingrese el número de la factura...'
+            }),
+            'reference_cufe': forms.TextInput(attrs={
+                'class': 'form-control',
+                'readonly': True,
+                'placeholder': 'CUFE de la factura...'
+            }),
+            'subtotal_0': forms.TextInput(attrs={
+                'class': 'form-control',
+                'disabled': True,
+            }),
+            'subtotal_12': forms.TextInput(attrs={
+                'class': 'form-control',
+                'disabled': True
+            }),
+            'subtotal_12_sin_iva': forms.TextInput(attrs={
+                'class': 'form-control',
+                'disabled': True
+            }),
+            'iva': forms.TextInput(attrs={
+                'class': 'form-control',
+                'disabled': True
+            }),
+            'total_iva': forms.TextInput(attrs={
+                'class': 'form-control',
+                'disabled': True
+            }),
+            'dscto': forms.TextInput(attrs={
+                'class': 'form-control',
+                'autocomplete': 'off'
+            }),
+            'total_dscto': forms.TextInput(attrs={
+                'class': 'form-control',
+                'disabled': True
+            }),
+            'total': forms.TextInput(attrs={
+                'class': 'form-control',
+                'disabled': True
+            }),
+            'paymentmethod': forms.Select(attrs={
+                'class': 'select2',
+                'style': 'width: 100%'
+            }),
+            'transfermethods': forms.Select(attrs={
+                'class': 'select2',
+                'style': 'width: 100%'
+            }),
+            'typemethods': forms.Select(attrs={
+                'class': 'select2',
+                'style': 'width: 100%'
+            }),
+            'expiration_date': forms.DateInput(format='%Y-%m-%d', attrs={
+                'class': 'form-control datetimepicker-input',
+                'id': 'expiration_date',
+                'data-toggle': 'datetimepicker',
+                'data-target': '#expiration_date'
+            }),
+            'nequi_value': forms.TextInput(attrs={
+                'class': 'form-control',
+                'autocomplete': 'off'
+            }),
+            'daviplata_value': forms.TextInput(attrs={
+                'class': 'form-control',
+                'autocomplete': 'off'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 8,
+                'placeholder': 'Observaciones de la nota crédito...',
+                'style': 'resize:none;'
+            }),
+        }
+
 class PriceForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

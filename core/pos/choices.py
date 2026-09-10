@@ -75,6 +75,23 @@ PERSON_TYPE = (
     ('juridica', 'Persona Jurídica'),
 )
 
+# Códigos oficiales DIAN / Factus para notas crédito (tabla "Códigos de tipos
+# de operación (notas crédito)" y "Códigos de corrección (notas crédito)").
+# Ver: https://developers.factus.com.co/tablas-de-referencia/tablas/
+CREDIT_NOTE_OPERATION_TYPE = (
+    ('20', 'Nota crédito que referencia una factura electrónica'),
+    ('22', 'Nota crédito sin referencia a una factura electrónica'),
+)
+
+CREDIT_NOTE_CORRECTION_CONCEPT = (
+    ('1', 'Devolución parcial de los bienes y/o no aceptación parcial del servicio'),
+    ('2', 'Anulación de factura electrónica'),
+    ('3', 'Rebaja o descuento parcial o total'),
+    ('4', 'Ajuste de precio'),
+    ('5', 'Descuento comercial por pronto pago'),
+    ('6', 'Descuento comercial por volumen de ventas'),
+)
+
 TAX_RESPONSIBILITY = (
     ('no_responsable', 'No responsable de IVA'),
     ('responsable', 'Responsable de IVA'),

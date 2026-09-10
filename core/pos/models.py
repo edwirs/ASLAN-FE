@@ -23,6 +23,8 @@ from core.pos.choices import EMPLOYEE_TRANSACTION_CHOICES
 from core.pos.choices import AUTORIZATION_DISCOUNT
 from core.pos.choices import PERSON_TYPE
 from core.pos.choices import TAX_RESPONSIBILITY
+from core.pos.choices import CREDIT_NOTE_OPERATION_TYPE
+from core.pos.choices import CREDIT_NOTE_CORRECTION_CONCEPT
 from core.user.models import User
 
 class Departamento(models.Model):
@@ -1176,3 +1178,183 @@ class ObservationTemplate(models.Model):
     class Meta:
         verbose_name = 'Plantilla de Observación'
         verbose_name_plural = 'Plantillas de Observaciones'
+
+
+class CreditNote(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, verbose_name='Compañia')
+    client = models.ForeignKey(Client, on_delete=models.PROTECT, verbose_name='Cliente')
+    employee = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name='Empleado')
+    creation_date = models.DateTimeField(auto_now_add=True, verbose_name='Fecha y hora de registro')
+    date_joined = models.DateField(default=datetime.now, verbose_name='Fecha de registro')
+
+    # Tipo de operación DIAN/Factus: '20' con referencia a factura, '22' sin referencia
+    operation_type = models.CharField(max_length=2, choices=CREDIT_NOTE_OPERATION_TYPE, default=CREDIT_NOTE_OPERATION_TYPE[0][0], verbose_name='Tipo de operación')
+    correction_concept = models.CharField(max_length=1, choices=CREDIT_NOTE_CORRECTION_CONCEPT, default=CREDIT_NOTE_CORRECTION_CONCEPT[0][0], verbose_name='Motivo')
+
+    # Solo aplica cuando operation_type == '20' (con referencia a factura)
+    reference_sale = models.ForeignKey(Sale, on_delete=models.PROTECT, null=True, blank=True, verbose_name='Factura referenciada')
+    reference_bill_number = models.CharField(max_length=50, null=True, blank=True, verbose_name='N° de factura referenciada')
+    reference_cufe = models.TextField(null=True, blank=True, verbose_name='CUFE de la factura referenciada')
+
+    # Solo obligatorio cuando operation_type == '22' (sin referencia a factura)
+    billing_period_start_date = models.DateField(null=True, blank=True, verbose_name='Periodo de facturación - Inicio')
+    billing_period_end_date = models.DateField(null=True, blank=True, verbose_name='Periodo de facturación - Fin')
+
+    subtotal_12 = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Subtotal 12%')
+    subtotal_12_sin_iva = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Valor Bruto')
+    subtotal_0 = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Subtotal 0%')
+    dscto = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Descuento')
+    total_dscto = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Valor del descuento')
+    iva = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Iva')
+    total_iva = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Valor de iva')
+    total = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Total nota crédito')
+
+    paymentmethod = models.CharField(max_length=50, choices=PAYMENTMETHODS, default=PAYMENTMETHODS[0][0], verbose_name='Método de pago')
+    transfermethods = models.CharField(max_length=50, choices=TRANSFERMETHODS, default=TRANSFERMETHODS[0][0], verbose_name='Tipo transferencia', null=True, blank=True)
+    typemethods = models.CharField(max_length=50, choices=TYPETMETHODS, default=TYPETMETHODS[0][0], verbose_name='Tipo pago', null=True, blank=True)
+    expiration_date = models.DateField(null=True, blank=True, verbose_name='Fecha de vencimiento')
+    nequi_value = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Valor Nequi')
+    daviplata_value = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Valor Daviplata')
+
+    description = models.CharField(max_length=500, null=True, blank=True, verbose_name='Observación')
+    is_active = models.BooleanField(default=True, verbose_name='Estado')
+
+    # Campos de integración con Factus
+    factus_credit_note_number = models.CharField(max_length=50, null=True, blank=True)
+    factus_status = models.CharField(max_length=20, null=True, blank=True)
+    factus_pdf_url = models.URLField(max_length=500, null=True, blank=True)
+    factus_xml_url = models.URLField(max_length=500, null=True, blank=True)
+    factus_cufe = models.TextField(null=True, blank=True)
+    factus_resolution = models.TextField(null=True, blank=True)
+    factus_prefix = models.TextField(null=True, blank=True)
+    factus_range_from = models.TextField(null=True, blank=True)
+    factus_range_to = models.TextField(null=True, blank=True)
+    factus_date_from = models.TextField(null=True, blank=True)
+    factus_date_to = models.TextField(null=True, blank=True)
+    factus_qr_url = models.URLField(null=True, blank=True)
+
+    def __str__(self):
+        return self.client.get_full_name()
+
+    def is_with_reference(self):
+        return self.operation_type == '20'
+
+    def can_edit_items(self):
+        """Solo la anulación de factura (motivo 2) bloquea la edición de ítems:
+        la nota debe reflejar exactamente lo facturado."""
+        return self.correction_concept != '2'
+
+    def get_full_subtotal(self):
+        return float(self.subtotal_0) + float(self.subtotal_12)
+
+    def calculate_detail(self):
+        for detail in self.creditnotedetail_set.filter():
+            detail.price = float(detail.price)
+            detail.iva = float(self.iva)
+            detail.price_with_vat = detail.price + (detail.price * detail.iva)
+            detail.subtotal = detail.price * detail.cant
+            detail.total_dscto = detail.subtotal * float(detail.dscto)
+            detail.total_iva = (detail.subtotal - detail.total_dscto) * detail.iva
+            detail.total = detail.subtotal - detail.total_dscto
+            detail.save()
+
+    def calculate_invoice(self):
+        self.subtotal_0 = float(self.creditnotedetail_set.filter(product__with_tax=False).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))
+        self.subtotal_12 = float(self.creditnotedetail_set.filter(product__with_tax=True).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))
+        subtotal = float(self.get_full_subtotal())
+        discount_rate = float(self.dscto or 0)
+        self.total_dscto = subtotal * discount_rate
+
+        iva_before_global_discount = float(self.creditnotedetail_set.filter(product__with_tax=True).aggregate(result=Coalesce(Sum('total_iva'), 0.00, output_field=FloatField())).get('result'))
+        self.total_iva = iva_before_global_discount * (1 - discount_rate)
+        self.subtotal_12_sin_iva = self.subtotal_12 * (1 - discount_rate)
+        self.total = (subtotal - float(self.total_dscto)) + float(self.total_iva)
+        self.save()
+
+    def toJSON(self):
+        item = model_to_dict(self, exclude=['company', 'creation_date'])
+        item['client'] = self.client.toJSON()
+        item['employee'] = self.employee.toJSON()
+        item['date_joined'] = self.date_joined.strftime('%Y-%m-%d')
+        local_date = self.creation_date.astimezone(ZoneInfo("America/Bogota"))
+        item['creation_time'] = local_date.strftime('%I:%M:%S %p')
+        item['datetime_full'] = local_date.strftime('%Y-%m-%d %I:%M %p')
+        item['operation_type'] = {'id': self.operation_type, 'name': self.get_operation_type_display()}
+        item['correction_concept'] = {'id': self.correction_concept, 'name': self.get_correction_concept_display()}
+        item['reference_sale_id'] = self.reference_sale_id
+        item['reference_bill_number'] = self.reference_bill_number
+        item['reference_cufe'] = self.reference_cufe
+        item['billing_period_start_date'] = (self.billing_period_start_date.strftime('%Y-%m-%d') if self.billing_period_start_date else None)
+        item['billing_period_end_date'] = (self.billing_period_end_date.strftime('%Y-%m-%d') if self.billing_period_end_date else None)
+        item['subtotal_12'] = float(self.subtotal_12)
+        item['subtotal_12_sin_iva'] = float(self.subtotal_12_sin_iva)
+        item['subtotal_0'] = float(self.subtotal_0)
+        item['subtotal'] = float(self.get_full_subtotal())
+        item['dscto'] = float(self.dscto)
+        item['total_dscto'] = float(self.total_dscto)
+        item['iva'] = float(self.iva)
+        item['total_iva'] = float(self.total_iva)
+        item['total'] = float(self.total)
+        item['paymentmethod'] = {'id': self.paymentmethod, 'name': self.get_paymentmethod_display()}
+        item['transfermethods'] = {'id': self.transfermethods, 'name': self.get_transfermethods_display()}
+        item['typemethods'] = {'id': self.typemethods, 'name': self.get_typemethods_display()}
+        item['expiration_date'] = (self.expiration_date.strftime('%Y-%m-%d') if self.expiration_date else None)
+        item['nequi_value'] = float(self.nequi_value)
+        item['daviplata_value'] = float(self.daviplata_value)
+        item['factus_credit_note_number'] = self.factus_credit_note_number
+        item['factus_status'] = self.factus_status
+        item['factus_pdf_url'] = self.factus_pdf_url
+        item['factus_xml_url'] = self.factus_xml_url
+        item['factus_cufe'] = self.factus_cufe
+        item['factus_resolution'] = self.factus_resolution
+        item['factus_qr_url'] = self.factus_qr_url
+        return item
+
+    class Meta:
+        verbose_name = 'Nota Crédito'
+        verbose_name_plural = 'Notas Crédito'
+        default_permissions = ()
+        permissions = (
+            ('view_creditnote', 'Can view Nota Crédito'),
+            ('add_creditnote', 'Can add Nota Crédito'),
+            ('delete_creditnote', 'Can delete Nota Crédito'),
+        )
+
+
+class CreditNoteDetail(models.Model):
+    credit_note = models.ForeignKey(CreditNote, on_delete=models.CASCADE)
+    sale_detail = models.ForeignKey(SaleDetail, on_delete=models.SET_NULL, null=True, blank=True, verbose_name='Línea de factura de origen')
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    cant = models.IntegerField(default=0)
+    price = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    price_with_vat = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    subtotal = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    iva = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    total_iva = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    dscto = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    total_dscto = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    total = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+
+    def __str__(self):
+        return self.product.name
+
+    def get_iva_percent(self):
+        return int(self.iva * 100)
+
+    def toJSON(self):
+        item = model_to_dict(self, exclude=['credit_note'])
+        item['product'] = self.product.toJSON()
+        item['price'] = float(self.price)
+        item['price_with_vat'] = float(self.price_with_vat)
+        item['subtotal'] = float(self.subtotal)
+        item['iva'] = float(self.iva)
+        item['total_iva'] = float(self.total_iva)
+        item['dscto'] = float(self.dscto)
+        item['total_dscto'] = float(self.total_dscto)
+        item['total'] = float(self.total)
+        return item
+
+    class Meta:
+        verbose_name = 'Detalle de Nota Crédito'
+        verbose_name_plural = 'Detalle de Notas Crédito'
+        default_permissions = ()

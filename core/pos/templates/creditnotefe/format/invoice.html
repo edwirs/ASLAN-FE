@@ -1,0 +1,336 @@
+{% load static %}
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Nota Crédito #{{ credit_note.factus_credit_note_number|default:credit_note.id }}</title>
+    <style>
+        @page {
+            size: letter;
+            margin: 0.8cm 0.7cm;
+        }
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            color: #212529;
+            font-size: 10.5pt;
+            line-height: 1.25;
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+        }
+        .main-container {
+            width: 100%;
+            padding: 5px;
+            box-sizing: border-box;
+        }
+        .w-100 { width: 100%; }
+        .table-layout {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+        .table-layout td {
+            vertical-align: top;
+            padding: 0;
+        }
+        .info-box {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 6px;
+            background-color: #f8f9fa;
+        }
+        .info-row {
+            padding: 5px 6px;
+            font-size: 9pt;
+            border-bottom: 1px solid #e9ecef;
+            line-height: 1.4;
+        }
+        .info-row-white {
+            background-color: #ffffff;
+        }
+        .fw-bold { font-weight: bold; }
+
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 12px;
+        }
+        .items-table th {
+            background-color: #f8f9fa;
+            color: #212529;
+            font-size: 8.5pt;
+            font-weight: bold;
+            text-align: center;
+            padding: 5px 3px;
+            border: 1px solid #dee2e6;
+            white-space: nowrap;
+        }
+        .items-table td {
+            font-size: 8.5pt;
+            padding: 5px 4px;
+            border: 1px solid #dee2e6;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        .items-table td.desc-col {
+            white-space: normal;
+        }
+
+        .text-end { text-align: right; }
+        .text-center { text-align: center; }
+        .text-start { text-align: left; }
+
+        .obs-box {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 8px;
+            background-color: #f8f9fa;
+            height: 100%;
+        }
+        .totals-box {
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background-color: #ffffff;
+            padding: 4px;
+        }
+        .totals-header {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 9pt;
+            text-align: center;
+            padding: 5px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .totals-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .totals-table td {
+            padding: 3px 5px;
+            font-size: 9pt;
+            border: none;
+            white-space: nowrap;
+        }
+        .totals-final-row {
+            border-top: 1px solid #dee2e6;
+            font-weight: bold;
+            color: #dc3545;
+            font-size: 9.5pt;
+            padding-top: 5px;
+        }
+        .payment-details-border {
+            border-left: 3px solid #0d6efd;
+            padding-left: 8px;
+        }
+        .footer-box {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 8px;
+            text-align: center;
+            margin-top: 10px;
+        }
+        .footer-container {
+            position: absolute;
+            bottom: 10px;
+            left: 0;
+            right: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+
+    <!-- ENCABEZADO -->
+    <table width="100%" style="border-collapse: collapse; margin-bottom: 15px;">
+        <tr>
+            <td width="25%" style="vertical-align: top !important; text-align: left; padding: 0; margin: 0;">
+                {% if company_image_path %}
+                    <img src="{{ company_image_path }}" style="width: 200px; height: auto; display: block; vertical-align: top; margin-top: -12px; margin-left: 0; padding: 0;" alt="Logo"/>
+                {% else %}
+                    <div style="font-size: 8pt; color: #666; border: 1px solid #ddd; padding: 10px; text-align: center;">
+                        Sin Logo
+                    </div>
+                {% endif %}
+            </td>
+
+            <td width="50%" style="vertical-align: top !important; text-align: center; font-size: 8.5pt; padding: 0; margin: 0;">
+                <span style="font-size: 10.5pt; font-weight: bold; color: #111827; display: block; margin-bottom: 2px; margin-top: 0;">
+                    NOTA CRÉDITO ELECTRÓNICA
+                </span>
+                <span style="font-size: 9.5pt; font-weight: bold; color: #111827; display: block; margin-bottom: 3px;">
+                    NÚMERO {{ credit_note.factus_credit_note_number|default:"PENDIENTE" }}
+                </span>
+
+                <div style="line-height: 1.15; color: #1f2937;">
+                    <span style="font-size: 9.5pt; font-weight: bold; display: block;">{{ company_name }}</span>
+                    <span style="display: block; font-weight: bold;">NIT {{ company_ruc }}</span>
+                    <span style="display: block; font-weight: bold;">{{ company.phone }}</span>
+                    <span style="display: block; color: #4b5563;">{{ company_email }}</span>
+                    <span style="display: block; color: #4b5563;">{{ company_address }}</span>
+                </div>
+            </td>
+
+            <td width="25%" style="vertical-align: top !important; text-align: right; padding: 0; margin: 0;">
+                {% if qr_base64 %}
+                    <img src="{{ qr_base64 }}" style="width: 150px; height: 150px; display: block; vertical-align: top; margin: 0 0 0 auto; padding: 0;" alt="QR Nota Crédito"/>
+                {% else %}
+                    <div style="border: 1px dashed #ccc; width: 115px; height: 115px; text-align: center; font-size: 7pt; color: #666; padding-top: 45px; float: right;">
+                        QR Pendiente
+                    </div>
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <!-- DATOS CLIENTE Y FECHAS -->
+    <table class="table-layout" style="margin-bottom: 15px;">
+        <tr>
+            <td style="width: 58%; padding-right: 8px;">
+                <div class="info-box">
+                    <table class="w-100" style="border-collapse: collapse;">
+                        <tr class="info-row info-row-white"><td style="width: 28%;" class="fw-bold">CC/NIT:</td><td style="width: 72%;">{{ credit_note.client.dni }}</td></tr>
+                        <tr class="info-row"><td class="fw-bold">Cliente:</td><td>{{ credit_note.client.names }}</td></tr>
+                        <tr class="info-row info-row-white"><td class="fw-bold">País:</td><td>Colombia</td></tr>
+                        <tr class="info-row"><td class="fw-bold">Dirección:</td><td>{{ credit_note.client.address|default:"No registrada" }}</td></tr>
+                        <tr class="info-row info-row-white" style="border-bottom: none;"><td class="fw-bold">Email:</td><td>{{ credit_note.client.email|default:"Sin correo" }}</td></tr>
+                    </table>
+                </div>
+            </td>
+            <td style="width: 42%; padding-left: 4px;">
+                <div class="info-box">
+                    <table class="w-100" style="border-collapse: collapse;">
+                        <tr class="info-row info-row-white">
+                            <td class="fw-bold" style="width: 45%;">Generación:</td>
+                            <td style="width: 55%; text-align: right;">{{ credit_note.creation_date|date:"d-m-Y H:i:s" }}</td>
+                        </tr>
+                        {% if credit_note.reference_bill_number %}
+                        <tr class="info-row">
+                            <td class="fw-bold">Factura Ref.:</td>
+                            <td style="text-align: right;">{{ credit_note.reference_bill_number }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="info-row" style="border-bottom: none;">
+                            <td class="fw-bold">Motivo:</td>
+                            <td style="text-align: right;">{{ credit_note.get_correction_concept_display }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- TABLA DE PRODUCTOS -->
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width: 4%;">#</th>
+                <th style="width: 7%;">Código</th>
+                <th style="width: 45%;">Descripción</th>
+                <th style="width: 12%;">Val. Unit</th>
+                <th style="width: 7%;">Cant</th>
+                <th style="width: 7%;">Dto.</th>
+                <th style="width: 6%;">IVA</th>
+                <th style="width: 12%;">Val. Item</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for detail in credit_note.creditnotedetail_set.all %}
+            <tr>
+                <td class="text-center">{{ forloop.counter }}</td>
+                <td class="text-start"><code>{{ detail.product.code }}</code></td>
+                <td class="text-start desc-col">{{ detail.product.name }}</td>
+                <td class="text-end">$ {{ detail.price|floatformat:2|intcomma }}</td>
+                <td class="text-center">{{ detail.cant|floatformat:2 }}</td>
+                <td class="text-end">$ {{ detail.total_dscto|default:"0.00"|floatformat:2|intcomma }}</td>
+                <td class="text-center">{{ detail.get_iva_percent }}%</td>
+                <td class="text-end fw-bold">$ {{ detail.subtotal|floatformat:2|intcomma }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- OBSERVACIONES Y TOTALES -->
+    <table class="table-layout" style="margin-bottom: 15px;">
+        <tr>
+            <td style="width: 55%; padding-right: 8px;">
+                <div class="obs-box">
+                    <p class="fw-bold" style="text-transform: uppercase; font-size: 9pt; margin: 0 0 4px 0; border-bottom: 1px solid #dee2e6; padding-bottom: 3px;">Observaciones</p>
+                    <p style="margin: 0; color: #6c757d; font-size: 8.5pt; white-space: pre-line;">{{ credit_note.description|default:"Sin observaciones" }}</p>
+                </div>
+            </td>
+            <td style="width: 45%; padding-left: 4px;">
+                <div class="totals-box">
+                    <div class="totals-header">Totales</div>
+                    <table class="totals-table">
+                        <tr><td>Nro líneas:</td><td class="text-end">{{ credit_note.creditnotedetail_set.count }}</td></tr>
+                        <tr><td>Valor bruto:</td><td class="text-end">$ {{ credit_note.subtotal_12_sin_iva|floatformat:2|intcomma }}</td></tr>
+                        <tr><td>Descuentos:</td><td class="text-end">$ {{ credit_note.total_dscto|default:"0.00"|floatformat:2|intcomma }}</td></tr>
+                        <tr><td>Impuestos:</td><td class="text-end">$ {{ credit_note.total_iva|default:"0.00"|floatformat:2|intcomma }}</td></tr>
+                        <tr>
+                            <td class="totals-final-row">Total nota crédito:</td>
+                            <td class="text-end totals-final-row">$ {{ credit_note.total|floatformat:2|intcomma }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- DETALLES DE PAGO Y TIPO DE OPERACIÓN -->
+    <table class="table-layout" style="margin-bottom: 15px;">
+        <tr>
+            <td style="width: 50%; padding-right: 5px;">
+                <p class="fw-bold" style="margin: 0 0 3px 0; font-size: 9pt;">Tipo de operación</p>
+                <p style="margin: 0; color: #6c757d; font-size: 9pt;">{{ credit_note.get_operation_type_display }}</p>
+                {% if credit_note.billing_period_start_date %}
+                    <p class="fw-bold" style="margin: 6px 0 3px 0; font-size: 9pt;">Periodo de facturación</p>
+                    <p style="margin: 0; color: #6c757d; font-size: 8.5pt;">
+                        {{ credit_note.billing_period_start_date }} a {{ credit_note.billing_period_end_date }}
+                    </p>
+                {% endif %}
+            </td>
+            <td style="width: 50%; padding-left: 5px;">
+                <p class="fw-bold" style="margin: 0 0 3px 0; font-size: 9pt;">Detalles de Pago</p>
+                <div class="payment-details-border">
+                    <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Forma de pago:</strong> {{ credit_note.get_paymentmethod_display|default:credit_note.paymentmethod }}</p>
+                    <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Medio de pago:</strong> {{ credit_note.get_typemethods_display|default:credit_note.typemethods }}</p>
+                    <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Referencia:</strong> nc-{{ credit_note.id }}</p>
+                    <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Monto:</strong> $ {{ credit_note.total|floatformat:2|intcomma }}</p>
+                    {% if credit_note.expiration_date %}
+                        <p style="margin: 0; font-size: 8.5pt;"><strong>Vencimiento:</strong> {{ credit_note.expiration_date }}</p>
+                    {% endif %}
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- PIE DE PAGINA / CUFE Y RESOLUCIÓN -->
+    <div class="footer-container">
+        <div class="footer-box">
+            <span class="fw-bold" style="font-size: 8pt; display: block; margin-bottom: 3px; word-break: break-all;">
+                CUFE: {{ credit_note.factus_cufe|default:"Pendiente de validación DIAN" }}
+            </span>
+            <hr style="border: none; border-top: 1px solid #dee2e6; margin: 4px 0;">
+            <p style="color: #6c757d; font-size: 7.5pt; margin: 0;">
+                Resolución No: {{ credit_note.factus_resolution|default:"N/A" }}
+                {% if credit_note.factus_prefix %}- Prefijo: {{ credit_note.factus_prefix }}{% endif %}
+                {% if credit_note.factus_range_from and credit_note.factus_range_to %}
+                - Rango Desde {{ credit_note.factus_range_from }} Hasta {{ credit_note.factus_range_to }}
+                {% endif %}
+                {% if credit_note.factus_date_from and credit_note.factus_date_to %}
+                - Vigencia desde {{ credit_note.factus_date_from }} hasta {{ credit_note.factus_date_to }}
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

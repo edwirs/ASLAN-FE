@@ -511,6 +511,18 @@
                 </li>
               {% endif %}
 
+              {% if perms.pos.view_creditnote %}
+                <li class="nav-item">
+                  <a
+                    href="{% url 'credit_note_Fe_admin_list' %}"
+                    class="nav-link"
+                  >
+                    <i class="far fa-circle nav-icon"></i>
+                    <p>Notas Crédito</p>
+                  </a>
+                </li>
+              {% endif %}
+
               <!-- {% if perms.pos.view_price %}
                 <li class="nav-item">
                   <a

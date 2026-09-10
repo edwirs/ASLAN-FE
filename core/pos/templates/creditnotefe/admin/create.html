@@ -1,0 +1,427 @@
+{% extends 'form.html' %}
+
+{% load widget_tweaks %}
+{% load static %}
+
+{% block assets_form %}
+    <link rel="stylesheet" href="{% static 'lib/jquery-ui-1.12.1/jquery-ui.css' %}"/>
+    <script src="{% static 'lib/jquery-ui-1.12.1/jquery-ui.min.js' %}"></script>
+    <script src="{% static 'lib/select2-4.0.13/js/select2.min.js' %}"></script>
+    <script src="{% static 'lib/select2-4.0.13/js/i18n/es.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'lib/select2-4.0.13/css/select2.min.css' %}">
+    <link rel="stylesheet" href="{% static 'lib/select2-4.0.13/css/select2-bootstrap4.min.css' %}">
+    <link rel="stylesheet" href="{% static 'lib/bootstrap-touchspin-4.2.5/css/jquery.bootstrap-touchspin.css' %}"/>
+    <script src="{% static 'lib/bootstrap-touchspin-4.2.5/js/jquery.bootstrap-touchspin.js' %}"></script>
+    <script src="{% static 'lib/tempusdominus-bootstrap-4.5.37.0/js/tempusdominus-bootstrap.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'lib/tempusdominus-bootstrap-4.5.37.0/css/tempusdominus-bootstrap.css' %}"/>
+    <link rel="stylesheet" href="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.css' %}">
+    <script src="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.js' %}"></script>
+
+    <style>
+        .card-custom {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px !important;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05) !important;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .form-section-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 800;
+            color: #111827 !important;
+            margin-bottom: 1rem;
+        }
+
+        .label-dark {
+            color: #1f2937 !important;
+            font-weight: 700 !important;
+        }
+
+        .invoice-summary-container {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.04);
+            border: 1px solid #e5e7eb;
+        }
+
+        .summary-divider {
+            border-right: 1px solid #d1d5db;
+            padding-right: 1.25rem;
+            margin-right: 1.25rem;
+        }
+
+        .summary-item {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+
+        .summary-label {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #374151;
+            margin-bottom: 0.25rem;
+            white-space: nowrap;
+        }
+
+        .summary-item input {
+            text-align: right !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            font-size: 1.1rem !important;
+            font-weight: 700 !important;
+            color: #111827 !important;
+            padding: 0 !important;
+            height: auto !important;
+            cursor: default;
+        }
+
+        .summary-item-total .summary-label {
+            color: #059669 !important;
+            font-size: 0.95rem;
+        }
+
+        .summary-item-total input {
+            color: #059669 !important;
+            font-size: 1.35rem !important;
+            font-weight: 800 !important;
+        }
+
+        .card-fill-container {
+            display: flex;
+            flex-direction: column;
+        }
+        .card-fill-container .card-body {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+        }
+        .card-fill-container .form-group,
+        .card-fill-container textarea {
+            flex: 1 1 auto;
+            width: 100%;
+        }
+        .card-fill-container textarea {
+            resize: vertical;
+            min-height: 115px;
+        }
+
+        @media (max-width: 768px) {
+            .summary-divider {
+                border-right: none;
+                border-bottom: 1px solid #e5e7eb;
+                padding-right: 0;
+                margin-right: 0;
+                padding-bottom: 0.75rem;
+                margin-bottom: 0.75rem;
+            }
+            .summary-item {
+                text-align: left;
+            }
+            .summary-item input {
+                text-align: left !important;
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block form_fields %}
+<div class="row g-2">
+    <!-- Tipo de Registro -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white mb-0">
+            <div class="form-section-title"><i class="fas fa-file-alt me-1 mr-1"></i> Tipo de Registro</div>
+            <div class="row">
+                <div class="col-12 col-lg-4 mb-3 mb-lg-0">
+                    <label class="form-label label-dark">Tipo Documento:</label>
+                    <input type="text" class="form-control" readonly value="Nota Crédito Electrónica">
+                </div>
+                <div class="col-12 col-lg-4 mb-3 mb-lg-0">
+                    <label class="form-label label-dark">{{ form.operation_type.label }}:</label>
+                    {{ form.operation_type }}
+                </div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label label-dark">{{ form.correction_concept.label }}:</label>
+                    {{ form.correction_concept }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control de Documento -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white mb-0">
+            <div class="form-section-title"><i class="fas fa-hashtag me-1 mr-1"></i> Control de Documento</div>
+            <div class="row">
+                <div class="col-12 col-lg-4 mb-3 mb-lg-0">
+                    <label class="form-label label-dark"><i class="far fa-calendar-alt me-1 mr-1"></i>{{ form.date_joined.label }}:</label>
+                    {{ form.date_joined }}
+                </div>
+                <div class="col-12 col-lg-4 mb-3 mb-lg-0">
+                    <input type="hidden" id="numbering_range_id" name="numbering_range_id" value="">
+                    <label class="form-label label-dark"><i class="fas fa-list-ol me-1 mr-1"></i>Rango de numeración:</label>
+                    <input type="text" name="numbering_range" class="form-control" readonly>
+                </div>
+                <div class="col-12 col-lg-4">
+                    <label class="form-label label-dark"><i class="fas fa-receipt me-1 mr-1"></i>Consecutivo:</label>
+                    <input type="text" name="consecutive" class="form-control" readonly>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Factura Referenciada (solo con referencia) -->
+    <div class="col-12" id="cardReferenceInvoice">
+        <div class="card card-custom p-3 bg-white mb-0">
+            <div class="form-section-title"><i class="fas fa-file-invoice me-1 mr-1"></i> Factura Referenciada</div>
+            <div class="row">
+                <div class="col-12 col-lg-6 mb-3 mb-lg-0">
+                    <label class="form-label label-dark">Número de factura:</label>
+                    <div class="input-group">
+                        {{ form.reference_bill_number }}
+                        <div class="input-group-append">
+                            <button class="btn btn-primary" type="button" id="btnSearchInvoice">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <label class="form-label label-dark">CUFE:</label>
+                    {{ form.reference_cufe }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Periodo de Facturación (solo sin referencia) -->
+    <div class="col-12" id="cardBillingPeriod">
+        <div class="card card-custom p-3 bg-white mb-0">
+            <div class="form-section-title"><i class="fas fa-calendar-week me-1 mr-1"></i> Periodo de Facturación</div>
+            <div class="row">
+                <div class="col-12 col-lg-6 mb-3 mb-lg-0">
+                    <label class="form-label label-dark">{{ form.billing_period_start_date.label }}:</label>
+                    {{ form.billing_period_start_date }}
+                </div>
+                <div class="col-12 col-lg-6">
+                    <label class="form-label label-dark">{{ form.billing_period_end_date.label }}:</label>
+                    {{ form.billing_period_end_date }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Datos del Cliente -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white mb-0">
+            <div class="form-section-title"><i class="fas fa-user-tag me-1 mr-1"></i> Datos del Cliente</div>
+            <div class="row">
+                <div class="col-lg-6 mb-3 mb-lg-0">
+                    <label class="form-label label-dark">{{ form.client.label }}:</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend" id="btnAddClientWrapper">
+                            <button class="btn btn-success btnAddClient" type="button" title="Crear cliente">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        {{ form.client }}
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <label class="form-label label-dark">Correo de Envío (Facturación Electrónica):</label>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text bg-light"><i class="fas fa-envelope text-muted"></i></span>
+                        </div>
+                        <input type="email" id="client_email" name="client_email" class="form-control" readonly placeholder="Correo electrónico del cliente...">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detalle de Items -->
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white mb-0">
+            <div class="form-section-title"><i class="fas fa-boxes me-1 mr-1"></i> Detalle de Items</div>
+            <div class="mb-4" id="productSearchRow">
+                <label class="form-label label-dark">Búsqueda de productos o servicios:</label>
+                <div class="row g-2 align-items-stretch">
+                    <div class="col-12 col-md-6">
+                        <div class="input-group">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                            </div>
+                            <input type="text" id="search_product" class="form-control form-control-lg" autocomplete="off" name="search_product" placeholder="Ingrese el código de un producto o servicio">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="itemsLockedAlert" class="alert alert-warning d-none">
+                <i class="fas fa-lock me-1 mr-1"></i> Al anular una factura electrónica, la nota crédito debe reflejar exactamente los mismos ítems facturados. Busque la factura para cargarlos automáticamente.
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered align-middle" id="tblProducts">
+                    <thead class="bg-light">
+                        <tr>
+                            <th style="width: 5%;" class="text-center"></th>
+                            <th style="width: 30%;" class="text-dark font-weight-bold">Producto</th>
+                            <th style="width: 10%;" class="text-center text-dark font-weight-bold">Cantidad</th>
+                            <th style="width: 10%;" class="text-center text-dark font-weight-bold">Descuento %</th>
+                            <th style="width: 10%;" class="text-end text-right text-dark font-weight-bold">P./Unitario</th>
+                            <th style="width: 10%;" class="text-end text-right text-dark font-weight-bold">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Totales -->
+    <div class="col-12">
+        <div class="invoice-summary-container mb-0">
+            <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch align-items-md-center">
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Total Bruto</span>
+                    {{ form.subtotal_12_sin_iva }}
+                </div>
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Descuentos</span>
+                    {{ form.total_dscto }}
+                </div>
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Subtotal</span>
+                    {{ form.iva }}
+                </div>
+                <div class="summary-item summary-divider">
+                    <span class="summary-label">Impuesto (IVA)</span>
+                    {{ form.total_iva }}
+                </div>
+                <div class="summary-item summary-item-total">
+                    <span class="summary-label">Total</span>
+                    {{ form.total }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Descripción y Pagos -->
+    <div class="col-12">
+        <div class="row g-2">
+           <div class="col-lg-7">
+                <div class="card card-custom h-100 bg-white card-fill-container mb-0">
+                    <div class="card-header bg-transparent border-0 pt-3 pb-0">
+                        <div class="d-flex justify-content-between align-items-center w-100">
+                            <h6 class="mb-0 font-weight-bold text-dark" style="color: #334155 !important;">Observaciones</h6>
+                            <small class="text-muted mb-0" id="charCountDisplay" style="font-size: 0.85rem;">(0/500)</small>
+                        </div>
+                    </div>
+                    <div class="card-body pt-2">
+                        <div class="form-group mb-0">
+                            {{ form.description }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-5">
+                <div class="card card-custom h-100 bg-white mb-0">
+                    <div class="card-header bg-transparent border-0 pt-3 pb-0">
+                        <h6 class="mb-0 font-weight-bold label-dark"><i class="far fa-credit-card me-1 mr-1"></i> Método y Forma de Pago</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.paymentmethod.label }}:</label>
+                                {{ form.paymentmethod }}
+                            </div>
+                            <div class="col d-none">
+                                <label class="form-label label-dark">{{ form.transfermethods.label }}:</label>
+                                {{ form.transfermethods }}
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.nequi_value.label }}:</label>
+                                {{ form.nequi_value }}
+                            </div>
+                            <div class="col">
+                                <label class="form-label label-dark">{{ form.daviplata_value.label }}:</label>
+                                {{ form.daviplata_value }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de creación rápida de cliente -->
+<div class="modal fade" tabindex="-1" id="myModalClient">
+    <div class="modal-dialog">
+        <form class="form" id="frmClient" method="POST" autocomplete="off">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold">
+                        <i class="fa fa-plus"></i> Nuevo registro de un cliente
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="container-fluid">
+                        {% for field in frmClient.visible_fields %}
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">{{ field.label }}:</label>
+                                {{ field|add_class:'form-control' }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <div class="container-fluid">
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Guardar registro
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block buttons %}
+    <button type="submit" class="btn btn-primary px-4 shadow-sm">
+        <i class="fas fa-file-invoice-dollar mr-1 me-1"></i> Registrar Nota Crédito
+    </button>
+    <a href="{{ list_url }}" class="btn btn-danger px-4 shadow-sm">
+        <i class="fas fa-times mr-1 me-1"></i> Cancelar
+    </a>
+{% endblock %}
+
+{% block content_form_before %}
+    <script>
+        const ACTIVE_RANGE_ID = "{{ factus_range_id|default:'' }}";
+        document.addEventListener("DOMContentLoaded", function() {
+            const hiddenInput = document.getElementById("numbering_range_id");
+            if (hiddenInput) {
+                hiddenInput.value = ACTIVE_RANGE_ID;
+            }
+        });
+        const FACTUS_RANGE_DISPLAY = "{{ factus_range_text|default:'' }}";
+        const FACTUS_CURRENT_CONSECUTIVE = "{{ factus_current|default:'1' }}";
+    </script>
+    <script src="{% static 'creditnotefe/admin/js/form.js' %}"></script>
+    <iframe id="print_frame" style="display:none;"></iframe>
+{% endblock %}
