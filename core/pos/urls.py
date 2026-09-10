@@ -72,6 +72,7 @@ urlpatterns = [
     path('creditnotefe/admin/add/', CreditNoteFeCreateView.as_view(), name='credit_note_Fe_admin_create'),
     path('creditnotefe/admin/delete/<int:pk>/', CreditNoteFeDeleteView.as_view(), name='credit_note_Fe_admin_delete'),
     path('creditnotefe/admin/print/<int:pk>/', CreditNoteFePrintView.as_view(), name='credit_note_Fe_admin_print'),
+    path('creditnotefe/admin/download/pdf/<int:pk>/', CreditNoteFeDownloadPdfView.as_view(), name='credit_note_Fe_admin_download_pdf'),
     # price
     path('price/admin/', PriceListView.as_view(), name='price_admin_list'),
     path('price/admin/add/', PriceCreateView.as_view(), name='price_admin_create'),

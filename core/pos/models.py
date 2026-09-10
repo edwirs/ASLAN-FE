@@ -1232,6 +1232,7 @@ class CreditNote(models.Model):
     factus_date_from = models.TextField(null=True, blank=True)
     factus_date_to = models.TextField(null=True, blank=True)
     factus_qr_url = models.URLField(null=True, blank=True)
+    email_sent_count = models.PositiveIntegerField(default=0, verbose_name="Correos enviados")
 
     def __str__(self):
         return self.client.get_full_name()
@@ -1308,6 +1309,7 @@ class CreditNote(models.Model):
         item['factus_cufe'] = self.factus_cufe
         item['factus_resolution'] = self.factus_resolution
         item['factus_qr_url'] = self.factus_qr_url
+        item['email_sent_count'] = self.email_sent_count
         return item
 
     class Meta:

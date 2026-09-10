@@ -189,9 +189,15 @@ def generate_internal_sale_pdf(sale, request=None):
         return None
 
 
-def send_credit_note_electronic_email(credit_note, request=None):
+def send_credit_note_electronic_email(credit_note, request=None, target_email=None):
+    if credit_note.email_sent_count >= 4:
+        return {
+            "success": False,
+            "message": "Esta nota crédito ya alcanzó el límite máximo de 4 envíos de correo."
+        }
+
     client = credit_note.client
-    client_email = client.email if client else None
+    client_email = (target_email or (client.email if client else None) or "").strip() or None
 
     if not client_email:
         return {
@@ -241,9 +247,12 @@ def send_credit_note_electronic_email(credit_note, request=None):
 
         email.send(fail_silently=False)
 
+        credit_note.email_sent_count += 1
+        credit_note.save(update_fields=['email_sent_count'])
+
         return {
             "success": True,
-            "message": "Correo de la nota crédito enviado exitosamente."
+            "message": f"Correo enviado exitosamente (Envío {credit_note.email_sent_count} de 4)."
         }
 
     except Exception as e:

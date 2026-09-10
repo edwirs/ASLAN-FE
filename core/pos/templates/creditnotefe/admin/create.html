@@ -364,41 +364,6 @@
         </div>
     </div>
 </div>
-
-<!-- Modal de creación rápida de cliente -->
-<div class="modal fade" tabindex="-1" id="myModalClient">
-    <div class="modal-dialog">
-        <form class="form" id="frmClient" method="POST" autocomplete="off">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold">
-                        <i class="fa fa-plus"></i> Nuevo registro de un cliente
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="container-fluid">
-                        {% for field in frmClient.visible_fields %}
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">{{ field.label }}:</label>
-                                {{ field|add_class:'form-control' }}
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <div class="container-fluid">
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fas fa-save"></i> Guardar registro
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </form>
-    </div>
-</div>
 {% endblock %}
 
 {% block buttons %}
@@ -411,6 +376,45 @@
 {% endblock %}
 
 {% block content_form_before %}
+    <!-- Modal de creación rápida de cliente. Debe ir FUERA de <form id="frmForm">:
+         un <form> anidado hace que el navegador trate sus campos ("document_type",
+         "dni", "names") como parte del formulario principal y, al estar ocultos
+         dentro del modal, bloquea el envío en silencio (invalid form control not
+         focusable) sin disparar el evento submit ni mostrar ningún error. -->
+    <div class="modal fade" tabindex="-1" id="myModalClient">
+        <div class="modal-dialog">
+            <form class="form" id="frmClient" method="POST" autocomplete="off">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold">
+                            <i class="fa fa-plus"></i> Nuevo registro de un cliente
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="container-fluid">
+                            {% for field in frmClient.visible_fields %}
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">{{ field.label }}:</label>
+                                    {{ field|add_class:'form-control' }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="container-fluid">
+                            <div class="d-grid gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save"></i> Guardar registro
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const ACTIVE_RANGE_ID = "{{ factus_range_id|default:'' }}";
         document.addEventListener("DOMContentLoaded", function() {

@@ -17,7 +17,7 @@ from django.conf import settings
 from core.pos.forms import *
 from core.reports.forms import ReportForm
 from core.security.mixins import GroupPermissionMixin
-from core.services.factus import create_credit_note, get_numbering_ranges
+from core.services.factus import create_credit_note, get_numbering_ranges, download_credit_note_pdf
 from core.services.services import send_credit_note_electronic_email, generate_qr_base64_from_url
 
 MODULE_NAME = 'Notas Crédito'
@@ -50,6 +50,34 @@ class CreditNoteFeListView(GroupPermissionMixin, FormView):
                 data = []
                 for i in CreditNoteDetail.objects.filter(credit_note_id=request.POST.get('id')):
                     data.append(i.toJSON())
+            elif action == 'get_client_emails':
+                credit_note = CreditNote.objects.select_related('client').get(pk=request.POST.get('id'))
+                emails = []
+                if credit_note.client.email:
+                    emails.append({
+                        'value': credit_note.client.email,
+                        'label': f"Principal — {credit_note.client.email}",
+                    })
+                for contact in credit_note.client.contacts.exclude(email='').exclude(email__isnull=True):
+                    label = contact.names
+                    if contact.position:
+                        label += f" ({contact.position})"
+                    emails.append({'value': contact.email, 'label': f"{label} — {contact.email}"})
+                data = {
+                    'client_name': credit_note.client.get_full_name(),
+                    'emails': emails,
+                }
+            elif action == 'resend_email':
+                credit_note = CreditNote.objects.get(pk=request.POST.get('id'))
+                target_email = request.POST.get('email', '').strip()
+                if not target_email:
+                    data['error'] = 'Debe seleccionar un correo de destino'
+                else:
+                    result = send_credit_note_electronic_email(credit_note, request=request, target_email=target_email)
+                    if result.get('success'):
+                        data = {'success': True, 'message': result.get('message')}
+                    else:
+                        data['error'] = result.get('message')
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
@@ -199,7 +227,11 @@ class CreditNoteFeCreateView(GroupPermissionMixin, CreateView):
                         raise ValidationError(factus_response.get('error'))
 
                     data_resp = factus_response.get('data', {})
-                    bill_data = data_resp.get('bill', data_resp)
+                    # A diferencia de las facturas (cuyos datos vienen anidados en
+                    # ``data.bill``), en notas crédito el propio documento va en la
+                    # raíz de ``data``; ``data.bill`` es solo un eco de la FACTURA
+                    # referenciada, no la nota crédito recién creada.
+                    bill_data = data_resp
                     numbering_range = data_resp.get('numbering_range', {})
                     if not bill_data or not bill_data.get('number'):
                         raise ValidationError('Factus no devolvió los datos de la nota crédito creada')
@@ -219,7 +251,10 @@ class CreditNoteFeCreateView(GroupPermissionMixin, CreateView):
                                 'validated' if bill_data.get('is_validated') else 'pending'
                             )
                             credit_note.factus_pdf_url = links_data.get('public_url')
-                            credit_note.factus_cufe = bill_data.get('cufe')
+                            # DIAN llama "CUDE" (no "CUFE") al código único de las
+                            # notas crédito/débito; se conserva el campo factus_cufe
+                            # del modelo por reutilizarlo con el mismo propósito.
+                            credit_note.factus_cufe = bill_data.get('cude') or bill_data.get('cufe')
                             credit_note.factus_resolution = numbering_range.get('resolution_number')
                             credit_note.factus_prefix = numbering_range.get('prefix')
                             credit_note.factus_range_from = numbering_range.get('from')
@@ -429,3 +464,22 @@ class CreditNoteFePrintView(LoginRequiredMixin, View):
             return render(request, 'creditnotefe/format/invoice.html', context)
         except CreditNote.DoesNotExist:
             return HttpResponseRedirect(settings.LOGIN_REDIRECT_URL)
+
+
+class CreditNoteFeDownloadPdfView(LoginRequiredMixin, View):
+    def get(self, request, *args, **kwargs):
+        try:
+            credit_note = CreditNote.objects.get(id=self.kwargs['pk'])
+            if not credit_note.factus_credit_note_number:
+                return HttpResponse('Esta nota crédito aún no ha sido validada por Factus', status=400)
+
+            content = download_credit_note_pdf(credit_note.factus_credit_note_number)
+            if not content or isinstance(content, dict):
+                message = content.get('error') if isinstance(content, dict) else 'No fue posible descargar el PDF'
+                return HttpResponse(message, status=502)
+
+            response = HttpResponse(content, content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="nota_credito_{credit_note.factus_credit_note_number}.pdf"'
+            return response
+        except CreditNote.DoesNotExist:
+            return HttpResponse('La nota crédito no existe', status=404)

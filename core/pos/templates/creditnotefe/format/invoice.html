@@ -21,7 +21,7 @@
         }
         .main-container {
             width: 100%;
-            padding: 5px;
+            padding: 5px 18px 5px 5px;
             box-sizing: border-box;
         }
         .w-100 { width: 100%; }
@@ -125,20 +125,51 @@
             border-left: 3px solid #0d6efd;
             padding-left: 8px;
         }
-        .footer-box {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 4px;
-            padding: 8px;
-            text-align: center;
-            margin-top: 10px;
-        }
         .footer-container {
-            position: absolute;
-            bottom: 10px;
-            left: 0;
-            right: 0;
-            width: 100%;
+            position: fixed;
+            bottom: 8px;
+            left: 0.7cm;
+            right: 0.9cm;
+        }
+        .footer-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-top: 1px solid #dee2e6;
+            padding-top: 4px;
+        }
+        .footer-codes {
+            font-size: 6.5pt;
+            color: #495057;
+            word-break: break-all;
+            max-width: 88%;
+        }
+        .footer-codes p {
+            margin: 0 0 1px 0;
+        }
+        .footer-page {
+            font-size: 8pt;
+            color: #495057;
+            white-space: nowrap;
+            padding-left: 8px;
+        }
+        /* Texto vertical predefinido en el margen derecho, igual al de la
+           representación gráfica de Factus. Se repite en cada página impresa. */
+        .vertical-sidebar-text {
+            position: fixed;
+            top: 0;
+            right: 4px;
+            width: 14px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            font-size: 6.5pt;
+            color: #6c757d;
+            letter-spacing: 0.2px;
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -205,20 +236,16 @@
             <td style="width: 42%; padding-left: 4px;">
                 <div class="info-box">
                     <table class="w-100" style="border-collapse: collapse;">
-                        <tr class="info-row info-row-white">
+                        <tr class="info-row info-row-white"{% if not credit_note.reference_bill_number %} style="border-bottom: none;"{% endif %}>
                             <td class="fw-bold" style="width: 45%;">Generación:</td>
                             <td style="width: 55%; text-align: right;">{{ credit_note.creation_date|date:"d-m-Y H:i:s" }}</td>
                         </tr>
                         {% if credit_note.reference_bill_number %}
-                        <tr class="info-row">
+                        <tr class="info-row" style="border-bottom: none;">
                             <td class="fw-bold">Factura Ref.:</td>
                             <td style="text-align: right;">{{ credit_note.reference_bill_number }}</td>
                         </tr>
                         {% endif %}
-                        <tr class="info-row" style="border-bottom: none;">
-                            <td class="fw-bold">Motivo:</td>
-                            <td style="text-align: right;">{{ credit_note.get_correction_concept_display }}</td>
-                        </tr>
                     </table>
                 </div>
             </td>
@@ -288,6 +315,8 @@
             <td style="width: 50%; padding-right: 5px;">
                 <p class="fw-bold" style="margin: 0 0 3px 0; font-size: 9pt;">Tipo de operación</p>
                 <p style="margin: 0; color: #6c757d; font-size: 9pt;">{{ credit_note.get_operation_type_display }}</p>
+                <p class="fw-bold" style="margin: 6px 0 3px 0; font-size: 9pt;">Motivo de la nota</p>
+                <p style="margin: 0; color: #6c757d; font-size: 9pt;">{{ credit_note.get_correction_concept_display }}</p>
                 {% if credit_note.billing_period_start_date %}
                     <p class="fw-bold" style="margin: 6px 0 3px 0; font-size: 9pt;">Periodo de facturación</p>
                     <p style="margin: 0; color: #6c757d; font-size: 8.5pt;">
@@ -310,23 +339,21 @@
         </tr>
     </table>
 
-    <!-- PIE DE PAGINA / CUFE Y RESOLUCIÓN -->
+    <!-- TEXTO VERTICAL PREDEFINIDO (margen derecho) -->
+    <div class="vertical-sidebar-text">
+        Nota crédito generada con software propio autorizado por la DIAN.
+    </div>
+
+    <!-- PIE DE PAGINA / CUDE Y CUFE DE LA FACTURA -->
     <div class="footer-container">
-        <div class="footer-box">
-            <span class="fw-bold" style="font-size: 8pt; display: block; margin-bottom: 3px; word-break: break-all;">
-                CUFE: {{ credit_note.factus_cufe|default:"Pendiente de validación DIAN" }}
-            </span>
-            <hr style="border: none; border-top: 1px solid #dee2e6; margin: 4px 0;">
-            <p style="color: #6c757d; font-size: 7.5pt; margin: 0;">
-                Resolución No: {{ credit_note.factus_resolution|default:"N/A" }}
-                {% if credit_note.factus_prefix %}- Prefijo: {{ credit_note.factus_prefix }}{% endif %}
-                {% if credit_note.factus_range_from and credit_note.factus_range_to %}
-                - Rango Desde {{ credit_note.factus_range_from }} Hasta {{ credit_note.factus_range_to }}
+        <div class="footer-bar">
+            <div class="footer-codes">
+                <p>CUDE: {{ credit_note.factus_cufe|default:"Pendiente de validación DIAN" }}</p>
+                {% if credit_note.reference_cufe %}
+                <p>CUFE Factura: {{ credit_note.reference_cufe }}</p>
                 {% endif %}
-                {% if credit_note.factus_date_from and credit_note.factus_date_to %}
-                - Vigencia desde {{ credit_note.factus_date_from }} hasta {{ credit_note.factus_date_to }}
-                {% endif %}
-            </p>
+            </div>
+            <div class="footer-page">página 1 de 1</div>
         </div>
     </div>
 
