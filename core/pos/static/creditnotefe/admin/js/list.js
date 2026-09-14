@@ -81,6 +81,10 @@ var creditNote = {
                         buttons += '<li><a class="dropdown-item" href="#" rel="view_invoice" data-url="' + (row.factus_pdf_url || '') + '"><i class="fas fa-eye text-info"></i>Ver nota</a></li>';
                         buttons += '<li><a class="dropdown-item" href="#" rel="resend_email" data-id="' + row.id + '"><i class="fas fa-envelope text-primary"></i>Enviar nota al correo</a></li>';
                         buttons += '<li><a class="dropdown-item" href="#" rel="download_pdf" data-id="' + row.id + '"><i class="fas fa-file-pdf text-danger"></i>Descargar PDF</a></li>';
+                        if (!row.factus_cufe) {
+                            buttons += '<li><hr class="dropdown-divider my-1"></li>';
+                            buttons += '<li><a class="dropdown-item" href="#" rel="delete" data-id="' + row.id + '"><i class="fas fa-trash-alt text-danger"></i>Eliminar Nota Crédito</a></li>';
+                        }
                         buttons += '</ul></div>';
 
                         return buttons;
@@ -177,6 +181,36 @@ $(function () {
                 },
                 error: function () {
                     message_error('Ocurrió un error al consultar los correos del cliente');
+                }
+            });
+        })
+        .on('click', 'a[rel="delete"]', function (e) {
+            e.preventDefault();
+            $('.tooltip').remove();
+
+            let id = $(this).data('id');
+            dialog_action({
+                'content': 'Esta nota crédito se eliminará primero en Factus y luego en el sistema. ¿Deseas continuar?',
+                'success': function () {
+                    $.ajax({
+                        url: pathname + 'delete/' + id + '/',
+                        type: 'POST',
+                        headers: {'X-CSRFToken': csrftoken},
+                        dataType: 'json',
+                        success: function (data) {
+                            if (data.error) {
+                                return message_error(data.error);
+                            }
+                            toastr.success('La nota crédito se eliminó exitosamente');
+                            creditNote.list(false);
+                        },
+                        error: function () {
+                            message_error('Ocurrió un error al eliminar la nota crédito');
+                        }
+                    });
+                },
+                'cancel': function () {
+
                 }
             });
         });

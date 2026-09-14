@@ -17,7 +17,7 @@ from django.conf import settings
 from core.pos.forms import *
 from core.reports.forms import ReportForm
 from core.security.mixins import GroupPermissionMixin
-from core.services.factus import create_credit_note, get_numbering_ranges, download_credit_note_pdf
+from core.services.factus import create_credit_note, get_numbering_ranges, download_credit_note_pdf, delete_credit_note
 from core.services.services import send_credit_note_electronic_email, generate_qr_base64_from_url
 
 MODULE_NAME = 'Notas Crédito'
@@ -415,7 +415,19 @@ class CreditNoteFeDeleteView(GroupPermissionMixin, DeleteView):
     def post(self, request, *args, **kwargs):
         data = {}
         try:
-            self.get_object().delete()
+            credit_note = self.get_object()
+            # Solo se puede eliminar mientras no esté validada por la DIAN
+            # (una nota con CUFE ya es un documento fiscal definitivo).
+            if credit_note.factus_cufe:
+                data['error'] = 'No se puede eliminar una nota crédito ya validada por la DIAN'
+            else:
+                # Primero se elimina en Factus; solo si eso sale bien (o la
+                # nota nunca llegó a crearse allí) se elimina localmente.
+                factus_response = delete_credit_note(str(credit_note.id))
+                if 'error' in factus_response:
+                    data['error'] = factus_response.get('error')
+                else:
+                    credit_note.delete()
         except Exception as e:
             data['error'] = str(e)
         return HttpResponse(json.dumps(data), content_type='application/json')

@@ -419,3 +419,28 @@ def download_credit_note_pdf(number):
     except (requests.RequestException, ValueError, KeyError) as exc:
         logger.exception("No fue posible descargar el PDF de la nota crédito %s desde Factus", number)
         return {"error": "No fue posible descargar el PDF", "detail": str(exc)}
+
+
+def delete_credit_note(reference_code):
+    """
+    Elimina una nota crédito NO validada por la DIAN
+    (``DELETE /v2/credit-notes/reference/:reference_code``).
+    ``reference_code`` es el mismo valor enviado al crearla (``str(credit_note.id)``).
+    """
+    try:
+        response = requests.delete(
+            f"{FACTUS_API_URL}/v2/credit-notes/reference/{reference_code}",
+            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if response.status_code == 404:
+            # No existe en Factus (p. ej. nunca llegó a crearse allí porque el
+            # registro falló antes de validar): no hay nada que borrar del lado
+            # de Factus, se puede continuar con la eliminación local.
+            return {"success": True, "not_found": True}
+        if not response.ok:
+            return _error_response(response)
+        return {"success": True}
+    except requests.RequestException as exc:
+        logger.exception("No fue posible eliminar la nota crédito %s en Factus", reference_code)
+        return {"error": "No fue posible comunicarse con Factus", "detail": str(exc)}
