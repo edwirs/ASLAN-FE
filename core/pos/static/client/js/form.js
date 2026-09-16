@@ -74,6 +74,60 @@ $(function () {
         }
     });
 
+    // Botón "Consultar en DIAN": autocompleta nombres/razón social y correo
+    // consultando la identificación ante la DIAN (vía Factus). Solo se habilita
+    // cuando hay algo escrito en el campo de identificación.
+    var btnConsultDian = $('#btnConsultDian');
+
+    function toggleConsultDianButton() {
+        btnConsultDian.prop('disabled', inputDni.val().trim() === '');
+    }
+    inputDni.on('input keyup change', toggleConsultDianButton);
+    toggleConsultDianButton();
+
+    btnConsultDian.on('click', function () {
+        var dni = inputDni.val().trim();
+        if (dni === '') return;
+
+        $.ajax({
+            url: '/pos/client/consult_dian/',
+            type: 'POST',
+            headers: {'X-CSRFToken': csrftoken},
+            data: {
+                document_type: selectDocType.val(),
+                dni: dni
+            },
+            dataType: 'json',
+            beforeSend: function () {
+                btnConsultDian.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Consultando...');
+            },
+            success: function (data) {
+                if (data.error) {
+                    return message_error(data.error);
+                }
+                if (data.name) {
+                    $('input[name="names"]').val(data.name);
+                }
+                if (data.email) {
+                    $('input[name="email"]').val(data.email);
+                }
+                alert_sweetalert({
+                    'type': 'success',
+                    'message': 'Datos consultados exitosamente en la DIAN',
+                    'timer': 1500,
+                    'callback': function () {}
+                });
+            },
+            error: function () {
+                message_error('Ocurrió un error al consultar en la DIAN');
+            },
+            complete: function () {
+                btnConsultDian.html('<i class="fas fa-id-card"></i> Consultar en DIAN');
+                toggleConsultDianButton();
+            }
+        });
+    });
+
     // Función para manejar la visibilidad, clases y valores según si es NIT o no
     function evaluateDocumentType() {
         var selectedText = selectDocType.find('option:selected').text().toUpperCase();

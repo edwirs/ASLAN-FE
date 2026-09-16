@@ -6,10 +6,36 @@ from django.urls import reverse_lazy
 from django.views.generic import DeleteView, CreateView, UpdateView, TemplateView
 
 from core.pos.forms import ClientForm, ClientContactFormSet
-from core.pos.models import Client
+from core.pos.models import Client, DocumentType
 from core.security.mixins import GroupPermissionMixin
+from core.services.factus import get_acquirer_info
 
 MODULE_NAME = 'Clientes'
+
+
+def consult_dian_acquirer(request):
+    """Autocompleta nombre/razón social y correo de un cliente consultando la
+    DIAN a través de Factus, a partir de su tipo y número de identificación."""
+    data = {}
+    try:
+        document_type_id = request.POST.get('document_type')
+        identification_number = request.POST.get('dni', '').strip()
+        if not identification_number:
+            data['error'] = 'Ingrese un número de identificación'
+        elif not document_type_id:
+            data['error'] = 'Seleccione un tipo de documento'
+        else:
+            document_type = DocumentType.objects.get(pk=document_type_id)
+            result = get_acquirer_info(document_type.code, identification_number)
+            if 'error' in result:
+                data['error'] = result.get('error')
+            else:
+                data = result
+    except DocumentType.DoesNotExist:
+        data['error'] = 'Tipo de documento inválido'
+    except Exception as e:
+        data['error'] = str(e)
+    return HttpResponse(json.dumps(data), content_type='application/json')
 
 
 class ClientListView(GroupPermissionMixin, TemplateView):

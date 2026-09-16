@@ -81,6 +81,33 @@ def get_numbering_ranges():
         return {"error": "No fue posible consultar los rangos de Factus", "detail": str(exc)}
 
 
+def get_acquirer_info(identification_document_code, identification_number):
+    """Consulta ante la DIAN el nombre/razón social y correo de un adquiriente
+    (``GET /v2/dian/acquirer``), para autocompletar el registro de un cliente."""
+    try:
+        response = requests.get(
+            f"{FACTUS_API_URL}/v2/dian/acquirer",
+            params={
+                "identification_document_code": identification_document_code,
+                "identification_number": identification_number,
+            },
+            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            return _error_response(response)
+        body = response.json()
+        data = body.get("data") or {}
+        if not data.get("name") and not data.get("email"):
+            return {"error": "La DIAN no tiene datos registrados para esa identificación"}
+        return data
+    except (requests.RequestException, ValueError) as exc:
+        logger.exception(
+            "No fue posible consultar el adquiriente %s en la DIAN", identification_number
+        )
+        return {"error": "No fue posible consultar los datos en la DIAN", "detail": str(exc)}
+
+
 def _build_customer_payload(client, target_email=None):
     """Construye el objeto ``customer`` que exige Factus a partir de un Client."""
     document_code = str(getattr(client.document_type, "code", "") or "31")

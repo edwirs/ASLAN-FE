@@ -45,6 +45,7 @@ urlpatterns = [
     path('client/add/', ClientCreateView.as_view(), name='client_create'),
     path('client/update/<int:pk>/', ClientUpdateView.as_view(), name='client_update'),
     path('client/delete/<int:pk>/', ClientDeleteView.as_view(), name='client_delete'),
+    path('client/consult_dian/', consult_dian_acquirer, name='client_consult_dian'),
     # provider
     path('provider/', ProviderListView.as_view(), name='provider_list'),
     path('provider/add/', ProviderCreateView.as_view(), name='provider_create'),
