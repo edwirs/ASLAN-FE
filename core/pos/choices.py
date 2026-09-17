@@ -96,3 +96,8 @@ TAX_RESPONSIBILITY = (
     ('no_responsable', 'No responsable de IVA'),
     ('responsable', 'Responsable de IVA'),
 )
+
+FACTUS_ENVIRONMENT = (
+    ('sandbox', 'Sandbox (pruebas)'),
+    ('production', 'Producción'),
+)

@@ -1,0 +1,29 @@
+{% extends 'list.html' %}
+{% load static %}
+{% block assets_list %}
+    <script src="{% static 'factus_credential/js/list.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.css' %}">
+    <script src="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.js' %}"></script>
+{% endblock %}
+
+{% block columns %}
+    <th>Id</th>
+    <th>Nombre</th>
+    <th>Ambiente</th>
+    <th>URL de la API</th>
+    <th>Activa</th>
+    <th>Opciones</th>
+{% endblock %}
+
+{% block javascript_list %}
+
+{% endblock %}
+
+{% block content_list %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle"></i>
+        Aquí se configuran las credenciales con las que esta empresa se conecta a Factus. Puede guardar varias
+        (por ejemplo una de <b>Sandbox</b> y otra de <b>Producción</b>) y cambiar entre ellas marcando cuál queda
+        <b>Activa</b> — el sistema siempre usa esa para facturar.
+    </div>
+{% endblock %}

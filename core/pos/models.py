@@ -25,6 +25,7 @@ from core.pos.choices import PERSON_TYPE
 from core.pos.choices import TAX_RESPONSIBILITY
 from core.pos.choices import CREDIT_NOTE_OPERATION_TYPE
 from core.pos.choices import CREDIT_NOTE_CORRECTION_CONCEPT
+from core.pos.choices import FACTUS_ENVIRONMENT
 from core.user.models import User
 
 class Departamento(models.Model):
@@ -1360,3 +1361,50 @@ class CreditNoteDetail(models.Model):
         verbose_name = 'Detalle de Nota Crédito'
         verbose_name_plural = 'Detalle de Notas Crédito'
         default_permissions = ()
+
+
+class FactusCredential(models.Model):
+    """Credenciales propias de esta empresa (tenant) para conectarse a la API
+    de Factus. Al vivir en una app de TENANT_APPS, cada tenant solo ve y
+    administra sus propias filas — no requiere relación explícita al tenant.
+
+    Puede haber varias filas (ej. una de Sandbox y otra de Producción); la
+    marcada como activa (``is_active``) es la que usa ``core.services.factus``
+    en cada llamada. El ``save()`` garantiza que solo una quede activa a la vez.
+    """
+    name = models.CharField(max_length=100, verbose_name='Nombre', help_text='Ej: Producción, Sandbox de pruebas')
+    environment = models.CharField(max_length=20, choices=FACTUS_ENVIRONMENT, default=FACTUS_ENVIRONMENT[1][0], verbose_name='Ambiente')
+    api_url = models.URLField(max_length=200, verbose_name='URL de la API')
+    client_id = models.CharField(max_length=100, verbose_name='Client ID')
+    client_secret = models.CharField(max_length=200, verbose_name='Client Secret')
+    username = models.CharField(max_length=150, verbose_name='Usuario')
+    password = models.CharField(max_length=200, verbose_name='Contraseña')
+    is_active = models.BooleanField(default=False, verbose_name='Activa')
+    creation_date = models.DateTimeField(auto_now_add=True, verbose_name='Fecha de creación')
+
+    def __str__(self):
+        return f"{self.name} ({self.get_environment_display()})"
+
+    def save(self, *args, **kwargs):
+        if self.is_active:
+            # Garantiza que nunca haya dos credenciales activas a la vez: al
+            # activar esta, se desactivan todas las demás del mismo tenant.
+            FactusCredential.objects.exclude(pk=self.pk).update(is_active=False)
+        super().save(*args, **kwargs)
+
+    def toJSON(self):
+        item = model_to_dict(self, exclude=['client_secret', 'password'])
+        item['environment'] = {'id': self.environment, 'name': self.get_environment_display()}
+        item['creation_date'] = self.creation_date.strftime('%Y-%m-%d %H:%M') if self.creation_date else None
+        return item
+
+    class Meta:
+        verbose_name = 'Credencial de Factus'
+        verbose_name_plural = 'Credenciales de Factus'
+        default_permissions = ()
+        permissions = (
+            ('view_factuscredential', 'Can view Credencial de Factus'),
+            ('add_factuscredential', 'Can add Credencial de Factus'),
+            ('change_factuscredential', 'Can change Credencial de Factus'),
+            ('delete_factuscredential', 'Can delete Credencial de Factus'),
+        )

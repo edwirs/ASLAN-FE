@@ -1062,3 +1062,49 @@ class CashClosingForm(forms.ModelForm):
             data['error'] = str(e)
 
         return data
+
+
+class FactusCredentialForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['name'].widget.attrs['autofocus'] = True
+        # Al editar, no se re-piden ni se muestran los secretos en texto plano;
+        # si se dejan vacíos se conservan los valores ya guardados.
+        if self.instance.pk:
+            self.fields['client_secret'].required = False
+            self.fields['password'].required = False
+
+    class Meta:
+        model = FactusCredential
+        fields = '__all__'
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Ej: Producción, Sandbox de pruebas'
+            }),
+            'environment': forms.Select(attrs={'class': 'form-control select2', 'style': 'width: 100%'}),
+            'api_url': forms.URLInput(attrs={'class': 'form-control', 'placeholder': 'https://api.factus.com.co'}),
+            'client_id': forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off'}),
+            'client_secret': forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}, render_value=False),
+            'username': forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'off'}),
+            'password': forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}, render_value=False),
+        }
+
+    def save(self, commit=True):
+        data = {}
+        try:
+            if self.is_valid():
+                instance = super().save(commit=False)
+                # Si se dejaron en blanco al editar, se conserva lo guardado.
+                if self.instance.pk:
+                    if not self.cleaned_data.get('client_secret'):
+                        instance.client_secret = FactusCredential.objects.get(pk=self.instance.pk).client_secret
+                    if not self.cleaned_data.get('password'):
+                        instance.password = FactusCredential.objects.get(pk=self.instance.pk).password
+                if commit:
+                    instance.save()
+            else:
+                data['error'] = self.errors
+        except Exception as e:
+            data['error'] = str(e)
+        return data

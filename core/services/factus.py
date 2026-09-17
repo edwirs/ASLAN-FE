@@ -4,22 +4,41 @@ from datetime import date
 from decimal import Decimal
 
 import requests
-from django.conf import settings
+from django.core.cache import cache
+from django.db import connection
 from django.utils import timezone
 
 
 logger = logging.getLogger(__name__)
 
-# Estas credenciales se deben mover a variables de entorno antes de desplegar a
-# producción. Se conservan temporalmente aquí para no interrumpir la integración
-# ya configurada en este proyecto.
-FACTUS_API_URL = "https://api.factus.com.co"
-CLIENT_ID = "a2548925-3bca-4186-95da-487fab9ce2a8"
-CLIENT_SECRET = "aOIEg9SB8Lqn9Kqu8Yz3UZiIUg76HGxHylAF1LTl"
-USERNAME = "fexequialesescobar@hotmail.com"
-PASSWORD = "11426546"
-
 REQUEST_TIMEOUT = 30
+
+# El token de Factus dura 1 hora; se cachea un poco por debajo de eso para
+# nunca usar uno que Factus ya haya expirado por un margen de reloj.
+TOKEN_CACHE_SECONDS = 55 * 60
+
+
+class FactusConfigError(Exception):
+    """No hay una credencial de Factus activa configurada para este tenant."""
+    pass
+
+
+def _get_active_config():
+    """Retorna la credencial de Factus activa del tenant actual.
+
+    ``FactusCredential`` vive en una app de TENANT_APPS, así que esta consulta
+    ya queda aislada al esquema del tenant en curso sin necesidad de filtrar
+    explícitamente por empresa/cliente.
+    """
+    from core.pos.models import FactusCredential
+
+    config = FactusCredential.objects.filter(is_active=True).first()
+    if not config:
+        raise FactusConfigError(
+            "No hay credenciales de Factus configuradas para esta empresa. "
+            "Configure una en Configuraciones > Credenciales Factus."
+        )
+    return config
 
 
 def _as_money(value):
@@ -48,34 +67,50 @@ def _error_response(response, body=None):
     return {"error": "Factus rechazó la factura", "detail": body}
 
 
-def get_token():
+def get_token(config):
+    """Obtiene (y cachea) el token OAuth de la credencial dada.
+
+    La caché se distingue por esquema de tenant + credencial, para que dos
+    tenants -o dos credenciales del mismo tenant (sandbox/producción)- nunca
+    compartan un token por accidente.
+    """
+    cache_key = f"factus_token:{connection.schema_name}:{config.id}"
+    token = cache.get(cache_key)
+    if token:
+        return token
+
     response = requests.post(
-        f"{FACTUS_API_URL}/oauth/token",
+        f"{config.api_url}/oauth/token",
         data={
             "grant_type": "password",
-            "username": USERNAME,
-            "password": PASSWORD,
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
+            "username": config.username,
+            "password": config.password,
+            "client_id": config.client_id,
+            "client_secret": config.client_secret,
         },
         headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
         timeout=REQUEST_TIMEOUT,
     )
     response.raise_for_status()
-    return response.json()["access_token"]
+    token = response.json()["access_token"]
+    cache.set(cache_key, token, TOKEN_CACHE_SECONDS)
+    return token
 
 
 def get_numbering_ranges():
     """Consulta los rangos de numeración activos disponibles en Factus."""
     try:
+        config = _get_active_config()
         response = requests.get(
-            f"{FACTUS_API_URL}/v2/numbering-ranges",
-            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            f"{config.api_url}/v2/numbering-ranges",
+            headers={"Authorization": f"Bearer {get_token(config)}", "Accept": "application/json"},
             timeout=REQUEST_TIMEOUT,
         )
         if not response.ok:
             return _error_response(response)
         return response.json()
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except (requests.RequestException, ValueError, KeyError) as exc:
         logger.exception("No fue posible consultar los rangos de Factus")
         return {"error": "No fue posible consultar los rangos de Factus", "detail": str(exc)}
@@ -85,13 +120,14 @@ def get_acquirer_info(identification_document_code, identification_number):
     """Consulta ante la DIAN el nombre/razón social y correo de un adquiriente
     (``GET /v2/dian/acquirer``), para autocompletar el registro de un cliente."""
     try:
+        config = _get_active_config()
         response = requests.get(
-            f"{FACTUS_API_URL}/v2/dian/acquirer",
+            f"{config.api_url}/v2/dian/acquirer",
             params={
                 "identification_document_code": identification_document_code,
                 "identification_number": identification_number,
             },
-            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            headers={"Authorization": f"Bearer {get_token(config)}", "Accept": "application/json"},
             timeout=REQUEST_TIMEOUT,
         )
         if not response.ok:
@@ -101,6 +137,8 @@ def get_acquirer_info(identification_document_code, identification_number):
         if not data.get("name") and not data.get("email"):
             return {"error": "La DIAN no tiene datos registrados para esa identificación"}
         return data
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except (requests.RequestException, ValueError) as exc:
         logger.exception(
             "No fue posible consultar el adquiriente %s en la DIAN", identification_number
@@ -170,6 +208,11 @@ def _build_items_payload(details, global_discount_rate, tax_rate):
 
 def create_invoice(sale, numbering_range_id, target_email=None):
     """Construye y valida una factura estándar (operación 10) en Factus v2."""
+    try:
+        config = _get_active_config()
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
+
     client = sale.client
     customer = _build_customer_payload(client, target_email)
     items = _build_items_payload(
@@ -219,10 +262,10 @@ def create_invoice(sale, numbering_range_id, target_email=None):
 
     try:
         response = requests.post(
-            f"{FACTUS_API_URL}/v2/bills/validate",
+            f"{config.api_url}/v2/bills/validate",
             json=payload,
             headers={
-                "Authorization": f"Bearer {get_token()}",
+                "Authorization": f"Bearer {get_token(config)}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
@@ -243,14 +286,15 @@ def create_invoice(sale, numbering_range_id, target_email=None):
 
 def download_invoice_xml(bill_number):
     """
-    Consume el endpoint de Factus para obtener el contenido XML 
+    Consume el endpoint de Factus para obtener el contenido XML
     de una factura validada utilizando su número.
     """
     try:
+        config = _get_active_config()
         response = requests.get(
-            f"{FACTUS_API_URL}/v2/bills/{bill_number}/download-xml",
+            f"{config.api_url}/v2/bills/{bill_number}/download-xml",
             headers={
-                "Authorization": f"Bearer {get_token()}",
+                "Authorization": f"Bearer {get_token(config)}",
                 "Accept": "application/json",
             },
             timeout=REQUEST_TIMEOUT,
@@ -258,6 +302,8 @@ def download_invoice_xml(bill_number):
         if not response.ok:
             return _error_response(response)
         return response.content
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except (requests.RequestException, ValueError) as exc:
         logger.exception("No fue posible descargar el XML de la factura %s desde Factus", bill_number)
         return {"error": "No fue posible descargar el XML", "detail": str(exc)}
@@ -270,10 +316,11 @@ def download_invoice_pdf(invoice_number):
     Base64 dentro de ``pdf_base_64_encoded``, no el binario directo.
     """
     try:
+        config = _get_active_config()
         response = requests.get(
-            f"{FACTUS_API_URL}/v2/bills/{invoice_number}/download-pdf",
+            f"{config.api_url}/v2/bills/{invoice_number}/download-pdf",
             headers={
-                "Authorization": f"Bearer {get_token()}",
+                "Authorization": f"Bearer {get_token(config)}",
                 "Accept": "application/json",
             },
             timeout=REQUEST_TIMEOUT,
@@ -286,6 +333,8 @@ def download_invoice_pdf(invoice_number):
         if not encoded_pdf:
             return {"error": "Factus no devolvió el PDF de la factura"}
         return base64.b64decode(encoded_pdf)
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except (requests.RequestException, ValueError, KeyError) as exc:
         logger.exception("No fue posible descargar el PDF de la factura %s desde Factus", invoice_number)
         return {"error": "No fue posible descargar el PDF", "detail": str(exc)}
@@ -297,6 +346,11 @@ def create_credit_note(credit_note, numbering_range_id, target_email=None):
     ``credit_note.operation_type`` define si referencia una factura ('20') o no ('22').
     Ver: https://developers.factus.com.co/notas-credito/descripcion-de-campos/
     """
+    try:
+        config = _get_active_config()
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
+
     client = credit_note.client
     customer = _build_customer_payload(client, target_email)
     items = _build_items_payload(
@@ -364,10 +418,10 @@ def create_credit_note(credit_note, numbering_range_id, target_email=None):
 
     try:
         response = requests.post(
-            f"{FACTUS_API_URL}/v2/credit-notes/validate",
+            f"{config.api_url}/v2/credit-notes/validate",
             json=payload,
             headers={
-                "Authorization": f"Bearer {get_token()}",
+                "Authorization": f"Bearer {get_token(config)}",
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             },
@@ -389,14 +443,17 @@ def create_credit_note(credit_note, numbering_range_id, target_email=None):
 def get_credit_note(number):
     """Consulta una nota crédito específica (``GET /v2/credit-notes/:number``)."""
     try:
+        config = _get_active_config()
         response = requests.get(
-            f"{FACTUS_API_URL}/v2/credit-notes/{number}",
-            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            f"{config.api_url}/v2/credit-notes/{number}",
+            headers={"Authorization": f"Bearer {get_token(config)}", "Accept": "application/json"},
             timeout=REQUEST_TIMEOUT,
         )
         if not response.ok:
             return _error_response(response)
         return response.json()
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except (requests.RequestException, ValueError) as exc:
         logger.exception("No fue posible consultar la nota crédito %s en Factus", number)
         return {"error": "No fue posible consultar la nota crédito", "detail": str(exc)}
@@ -405,10 +462,11 @@ def get_credit_note(number):
 def download_credit_note_xml(number):
     """Descarga el XML de una nota crédito validada (``GET /v2/credit-notes/:number/download-xml``)."""
     try:
+        config = _get_active_config()
         response = requests.get(
-            f"{FACTUS_API_URL}/v2/credit-notes/{number}/download-xml",
+            f"{config.api_url}/v2/credit-notes/{number}/download-xml",
             headers={
-                "Authorization": f"Bearer {get_token()}",
+                "Authorization": f"Bearer {get_token(config)}",
                 "Accept": "application/json",
             },
             timeout=REQUEST_TIMEOUT,
@@ -416,6 +474,8 @@ def download_credit_note_xml(number):
         if not response.ok:
             return _error_response(response)
         return response.content
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except (requests.RequestException, ValueError) as exc:
         logger.exception("No fue posible descargar el XML de la nota crédito %s desde Factus", number)
         return {"error": "No fue posible descargar el XML", "detail": str(exc)}
@@ -427,10 +487,11 @@ def download_credit_note_pdf(number):
     Factus devuelve el binario codificado en Base64 dentro de ``pdf_base_64_encoded``.
     """
     try:
+        config = _get_active_config()
         response = requests.get(
-            f"{FACTUS_API_URL}/v2/credit-notes/{number}/download-pdf",
+            f"{config.api_url}/v2/credit-notes/{number}/download-pdf",
             headers={
-                "Authorization": f"Bearer {get_token()}",
+                "Authorization": f"Bearer {get_token(config)}",
                 "Accept": "application/json",
             },
             timeout=REQUEST_TIMEOUT,
@@ -443,6 +504,8 @@ def download_credit_note_pdf(number):
         if not encoded_pdf:
             return {"error": "Factus no devolvió el PDF de la nota crédito"}
         return base64.b64decode(encoded_pdf)
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except (requests.RequestException, ValueError, KeyError) as exc:
         logger.exception("No fue posible descargar el PDF de la nota crédito %s desde Factus", number)
         return {"error": "No fue posible descargar el PDF", "detail": str(exc)}
@@ -455,9 +518,10 @@ def delete_credit_note(reference_code):
     ``reference_code`` es el mismo valor enviado al crearla (``str(credit_note.id)``).
     """
     try:
+        config = _get_active_config()
         response = requests.delete(
-            f"{FACTUS_API_URL}/v2/credit-notes/reference/{reference_code}",
-            headers={"Authorization": f"Bearer {get_token()}", "Accept": "application/json"},
+            f"{config.api_url}/v2/credit-notes/reference/{reference_code}",
+            headers={"Authorization": f"Bearer {get_token(config)}", "Accept": "application/json"},
             timeout=REQUEST_TIMEOUT,
         )
         if response.status_code == 404:
@@ -468,6 +532,8 @@ def delete_credit_note(reference_code):
         if not response.ok:
             return _error_response(response)
         return {"success": True}
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
     except requests.RequestException as exc:
         logger.exception("No fue posible eliminar la nota crédito %s en Factus", reference_code)
         return {"error": "No fue posible comunicarse con Factus", "detail": str(exc)}

@@ -3,6 +3,7 @@ from django.urls import path
 from core.pos.views.category.views import *
 from core.pos.views.client.views import *
 from core.pos.views.company.views import *
+from core.pos.views.factus_credential.views import *
 from core.pos.views.product.views import *
 from core.pos.views.sale.views import *
 from core.pos.views.salefe.views import *
@@ -40,6 +41,11 @@ urlpatterns = [
     path('product/delete/<int:pk>/', ProductDeleteView.as_view(), name='product_delete'),
     # company
     path('company/update/', CompanyUpdateView.as_view(), name='company_update'),
+    # credenciales factus
+    path('factus_credential/', FactusCredentialListView.as_view(), name='factus_credential_list'),
+    path('factus_credential/add/', FactusCredentialCreateView.as_view(), name='factus_credential_create'),
+    path('factus_credential/update/<int:pk>/', FactusCredentialUpdateView.as_view(), name='factus_credential_update'),
+    path('factus_credential/delete/<int:pk>/', FactusCredentialDeleteView.as_view(), name='factus_credential_delete'),
     # client
     path('client/', ClientListView.as_view(), name='client_list'),
     path('client/add/', ClientCreateView.as_view(), name='client_create'),

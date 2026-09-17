@@ -796,6 +796,17 @@
                     </ul>
                     {% endif %}
 
+                    {% if perms.pos.view_factuscredential %}
+                    <ul class="nav nav-treeview">
+                        <li class="nav-item">
+                            <a href="{% url 'factus_credential_list' %}" class="nav-link">
+                                <i class="far fa-circle nav-icon"></i>
+                                <p>Credenciales Factus</p>
+                            </a>
+                        </li>
+                    </ul>
+                    {% endif %}
+
                     {% if perms.dashboard.view_dashboard %}
                     <ul class="nav nav-treeview">
                         <li class="nav-item">
