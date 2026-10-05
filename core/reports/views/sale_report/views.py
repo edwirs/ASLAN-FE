@@ -1,5 +1,5 @@
 import json
-from django.contrib.auth.mixins import LoginRequiredMixin
+from core.security.mixins import StrictPermissionMixin
 from django.http import HttpResponse
 from django.views.generic import FormView
 from django.db.models import Sum, Q, F, FloatField, Value as V
@@ -11,7 +11,8 @@ from core.reports.forms import ReportForm
 MODULE_NAME = 'R.Totales'
 
 
-class SaleReportView(LoginRequiredMixin, FormView):
+class SaleReportView(StrictPermissionMixin, FormView):
+    permission_required = 'pos.report_sales_menu'
     template_name = 'sale_report/report.html'
     form_class = ReportForm
 

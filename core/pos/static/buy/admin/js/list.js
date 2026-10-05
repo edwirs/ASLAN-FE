@@ -105,6 +105,12 @@ $(function () {
                 ],
                 columnDefs: [
                     {
+                        targets: [0],
+                        render: function (data, type, row) {
+                            return row.presentation_name ? data + ' - ' + row.presentation_name : data;
+                        }
+                    },
+                    {
                         targets: [-1, -2, -3, -5],
                         class: 'text-center',
                         render: function (data, type, row) {

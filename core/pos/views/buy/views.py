@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import Group
@@ -80,18 +81,63 @@ class BuyCreateView(GroupPermissionMixin, CreateView):
                     buy.paymentmethod = (request.POST['paymentmethod'])
                     buy.transfermethods = (request.POST['transfermethods'])
                     buy.save()
+                    update_costs = request.POST.get('update_costs') == 'on'
+                    products, holders = {}, {}
                     for i in json.loads(request.POST['products']):
-                        product = Product.objects.get(pk=i['id'])
+                        # Una sola instancia por producto/presentación: dos líneas del mismo stock
+                        # en la compra no deben pisarse entre sí.
+                        pid = int(i['id'])
+                        if pid not in products:
+                            products[pid] = Product.objects.select_for_update().get(pk=pid)
+                        product = products[pid]
+                        qty = int(i['cant'])
+                        if qty < 1:
+                            raise Exception(f"Cantidad inválida para '{product.name}'.")
+                        presentation, factor = None, Decimal(1)
+                        own = product.has_own_stock_variants()
+                        if i.get('presentation_id'):
+                            presentation = ProductPresentation.objects.filter(
+                                pk=i['presentation_id'], product=product, is_active=True,
+                                product__uses_presentations=True).first()
+                            if presentation is None:
+                                raise Exception(f"La presentación elegida de '{product.name}' ya no está disponible.")
+                            if not own:
+                                factor = presentation.factor
+                        price = float(i['price'])
+
                         detail = BuyDetail()
                         detail.buy_id_id = buy.id
                         detail.product_id = product.id
-                        detail.cant = int(i['cant'])
-                        detail.price = float(i['price'])
+                        detail.presentation = presentation
+                        detail.presentation_name = presentation.name if presentation else (
+                            product.unit_name if own else '')
+                        detail.factor = factor
+                        detail.own_stock = own
+                        detail.cant = qty
+                        detail.price = price
                         detail.dscto = float(i['dscto']) / 100
                         detail.save()
                         buy.calculate_detail()
-                        detail.product.stock += detail.cant
-                        detail.product.save()
+
+                        # El stock sube en unidad base (conversión) o en el de la variante comprada
+                        if own and presentation is not None:
+                            if presentation.pk not in holders:
+                                holders[presentation.pk] = ProductPresentation.objects.select_for_update().get(
+                                    pk=presentation.pk)
+                            holder = holders[presentation.pk]
+                        else:
+                            holder = product
+                        holder.stock += factor * qty
+                        holder.save(update_fields=['stock'])
+
+                        if update_costs and price > 0:
+                            # Último costo: el de la presentación y, si es conversión, el de la unidad base
+                            if presentation is not None:
+                                presentation.price = Decimal(str(price)).quantize(Decimal('0.01'))
+                                presentation.save(update_fields=['price'])
+                            if presentation is None or not own:
+                                product.price = (Decimal(str(price)) / factor).quantize(Decimal('0.01'))
+                                product.save(update_fields=['price'])
                     buy.calculate_invoice()
                     data = {'print_url': str(reverse_lazy('buy_admin_print_invoice', kwargs={'pk': buy.id}))}
             elif action == 'search_products':
@@ -105,6 +151,7 @@ class BuyCreateView(GroupPermissionMixin, CreateView):
                 for i in queryset:
                     item = i.toJSON()
                     item['pvp'] = float(i.pvp)
+                    item['options'] = i.sale_options()
                     item['value'] = i.get_full_name()
                     item['dscto'] = '0.00'
                     item['total_dscto'] = '0.00'
@@ -150,7 +197,34 @@ class BuyDeleteView(GroupPermissionMixin, DeleteView):
     def post(self, request, *args, **kwargs):
         data = {}
         try:
-            self.get_object().delete()
+            with transaction.atomic():
+                buy = self.get_object()
+                # La compra subió el stock; al eliminarla se devuelve (en unidad base o de la variante).
+                returns = {}
+                for detail in buy.buydetail_set.select_related('product', 'presentation'):
+                    if detail.own_stock and detail.presentation_id:
+                        key = ('presentation', detail.presentation_id)
+                    elif detail.own_stock and detail.presentation_name != detail.product.unit_name:
+                        continue  # la variante comprada ya no existe: no hay stock que devolver
+                    else:
+                        key = ('product', detail.product_id)
+                    returns[key] = returns.get(key, Decimal(0)) + detail.factor * detail.cant
+                for (kind, pk), units in returns.items():
+                    if kind == 'presentation':
+                        holder = ProductPresentation.objects.select_for_update().select_related('product').get(pk=pk)
+                        label, product = f'{holder.product.name} - {holder.name}', holder.product
+                    else:
+                        holder = Product.objects.select_for_update().get(pk=pk)
+                        label, product = holder.name, holder
+                    if product.is_service:
+                        continue
+                    if holder.stock < units:
+                        raise Exception(
+                            f"No se puede eliminar la compra: de '{label}' ingresaron {units} "
+                            f"y hoy solo hay {holder.stock} (ya se vendió parte).")
+                    holder.stock -= units
+                    holder.save(update_fields=['stock'])
+                buy.delete()
         except Exception as e:
             data['error'] = str(e)
         return HttpResponse(json.dumps(data), content_type='application/json')

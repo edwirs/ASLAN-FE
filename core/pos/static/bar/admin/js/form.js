@@ -43,11 +43,7 @@ var sale = {
         $('input[name="iva"]').val(this.detail.iva.toFixed(2));
         $('input[name="total_iva"]').val(this.detail.total_iva.toFixed(2));
         $('input[name="total_dscto"]').val(this.detail.total_dscto.toFixed(2));
-        $('input[name="total"]').val('$' + this.detail.total.toLocaleString('es-CL'));
 
-        var cash = parseFloat(input_cash.val());
-        var change = cash - sale.detail.total;
-        input_change.val(change.toFixed(2));
     },
     addProduct: function (item) {
         this.detail.products.push(item);
@@ -183,7 +179,7 @@ $(function () {
                             message_error('Producto no encontrado');
                             return;
                         }
-                        addProductToBarra(product);
+                        PosCart.addProductToBarra(product);
                     }
                 });
                 $(this).val('').focus();
@@ -246,71 +242,22 @@ $(function () {
         maxDate: new Date()
     });
 
-    select_paymentmethod.select2({
-        theme: "bootstrap4",
-        language: 'es'
-    });
-
-    select_transfermethods.select2({
-        theme: "bootstrap4",
-        language: 'es'
-    });
-
     select_autorization_discount.select2({
         theme: "bootstrap4",
         language: 'es',
         with: '100%'
     });
 
-    // referencias
-    const nequiGroup = $('input[name="nequi_value"]').closest('.col');
-    const daviplataGroup = $('input[name="daviplata_value"]').closest('.col');
-    nequiGroup.hide();
-    daviplataGroup.hide();
-    // helper
-    function toggleMixtoFields(show) {
-        if (show) {
-            nequiGroup.show();
-            daviplataGroup.show();
-        } else {
-            nequiGroup.hide();
-            daviplataGroup.hide();
+    // Total a pagar: con descuento (valor fijo) o cortesía (0); el método de pago lo calcula PosPayment
+    PosCart.setTotalFilter(function (gross) {
+        if (select_switch_cortesia.prop('checked')) return 0;
+        if (select_switch_discount.prop('checked')) {
+            return Math.max(gross - (parseFloat(input_discount_value.val()) || 0), 0);
         }
-    }
-
-    select_transfermethods.parent().hide(); 
-
-    select_paymentmethod.on('change', function(){
-        const selectedValue = $(this).val();
-        select_transfermethods.empty();
-        if (selectedValue === 'transfer') {
-            select_transfermethods.append('<option value="nequi">Nequi</option>');
-            select_transfermethods.append('<option value="daviplata">Daviplata</option>');
-            select_transfermethods.parent().show();
-            toggleMixtoFields(false);
-        } else if (selectedValue === 'mixto') {
-            select_transfermethods.append('<option value="mixto1">Nequi + Efectivo</option>');
-            select_transfermethods.append('<option value="mixto2">Daviplata + Efectivo</option>');
-            select_transfermethods.append('<option value="mixto3">Nequi + Daviplata</option>');
-            select_transfermethods.parent().show();
-            toggleMixtoFields(true);
-        } else {
-            select_transfermethods.parent().hide();
-            toggleMixtoFields(false);
-        }
-
-        // Si la forma de pago es transferencia o tarjeta, llenar cash con el total
-        if (['transfer', 'debitCard', 'creditCard', 'mixto'].includes(selectedValue)) {
-            var totalStr = $('input[name="total"]').val();
-            totalStr = totalStr.replace(/\./g, '').replace(',', '.');
-            var total = parseFloat(totalStr) || 0;
-            input_cash.val(total).trigger('change');
-        } else {
-            input_cash.val('0.00').trigger('change');
-        }
+        return gross;
     });
-
-    select_paymentmethod.trigger('change');
+    PosPayment.init();
+    PosCart.refresh();
 
     select_autorization_discount.parent().hide();
 
@@ -487,157 +434,9 @@ $(function () {
             tblSearchProducts.row(tr.row).remove().draw();
         });
 
-    $(document).on('click', '.product_card', function() {
-        const productId = $(this).data('id');
-        const name = $(this).data('name');
-        const unitPrice = parseFloat($(this).data('price'));
-        let stock = parseInt($(this).data('stock')) || 0;
-        let is_service = $(this).data('is_service');
+    // Carrito (producto + presentación): compartido con los pedidos de mesa
+    PosCart.init();
 
-        // BLOQUEAR SI NO HAY STOCK
-        if (!is_service && stock <= 0) {
-            console.log('Producto sin stock bloqueado');
-
-            // Opcional: mostrar alerta bonita
-            $.alert({
-                title: 'Sin stock',
-                content: 'Este producto no tiene stock disponible',
-                type: 'red'
-            });
-
-            return;
-        }
-        
-        // Evitar agregar el mismo producto varias veces (opcional)
-        const existingRow = $('#tblProductsBarra tbody tr').filter(function() {
-            return $(this).find('td:first').text() === name;
-        });
-        if (existingRow.length > 0) {
-            // Si ya existe, simplemente aumentar cantidad +1
-            let qtyInput = existingRow.find('.input-qty');
-            qtyInput.val(parseInt(qtyInput.val()) + 1).trigger('change');
-            return;
-        }
-
-        const row = $(`
-            <tr data-id="${productId}">
-                <td>${name}</td>
-                <td style="width: 80px;">
-                    <input type="number" class="form-control form-control-sm input-qty" value="1" min="1">
-                </td>
-                <td>
-                    <span class="price-display">${formatPrice(unitPrice)}</span>
-                    <button class="btn btn-sm btn-danger ms-2 btn-delete" title="Eliminar">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </td>
-            </tr>
-        `);
-        
-        $('#tblProductsBarra tbody').append(row);
-
-        // Al cambiar cantidad
-        row.find('.input-qty').on('change', function() {
-            let qty = parseInt($(this).val());
-            if (isNaN(qty) || qty < 1) {
-                qty = 1;
-                $(this).val(qty);
-            }
-
-            const tr = $(this).closest('tr');
-            const pricePerUnit = parseFloat($(this).closest('tr').data('price') || unitPrice);
-            const totalPrice = qty * pricePerUnit;
-
-            tr.find('.price-display').text(formatPrice(totalPrice));
-            updateTotal();
-        });
-
-        // Botón eliminar
-        row.find('.btn-delete').on('click', function() {
-            row.remove();
-            updateTotal();
-        });
-
-        updateTotal();
-    });
-
-    function formatPrice(value) {
-        return value.toLocaleString('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0
-        });
-    }
-
-    function updateTotal() {
-        let total = 0;
-        $('#tblProductsBarra tbody tr').each(function() {
-            const priceText = $(this).find('.price-display').text().replace(/[^0-9]/g, '');
-            const price = parseInt(priceText) || 0;
-            total += price;
-        });
-        $('#id_total').val(formatPrice(total));
-    }
-
-    function addProductToBarra(product){
-
-        const productId = product.id;
-        const name = product.name;
-        const unitPrice = parseFloat(product.pvp);
-
-        const existingRow = $('#tblProductsBarra tbody tr').filter(function(){
-            return $(this).data('id') == productId;
-        });
-
-        if(existingRow.length > 0){
-            let qtyInput = existingRow.find('.input-qty');
-            qtyInput.val(parseInt(qtyInput.val()) + 1).trigger('change');
-            return;
-        }
-
-        const row = $(`
-            <tr data-id="${productId}" data-price="${unitPrice}">
-                <td>${name}</td>
-                <td style="width:80px;">
-                    <input type="number" class="form-control form-control-sm input-qty" value="1" min="1">
-                </td>
-                <td>
-                    <span class="price-display">${formatPrice(unitPrice)}</span>
-                    <button class="btn btn-sm btn-danger ms-2 btn-delete">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </td>
-            </tr>
-        `);
-
-        $('#tblProductsBarra tbody').append(row);
-
-        row.find('.input-qty').on('change', function(){
-
-            let qty = parseInt($(this).val());
-
-            if(isNaN(qty) || qty < 1){
-                qty = 1;
-                $(this).val(qty);
-            }
-
-            const tr = $(this).closest('tr');
-            const pricePerUnit = parseFloat(tr.data('price'));
-            const totalPrice = qty * pricePerUnit;
-
-            tr.find('.price-display').text(formatPrice(totalPrice));
-
-            updateTotal();
-        });
-
-        row.find('.btn-delete').on('click', function(){
-            row.remove();
-            updateTotal();
-        });
-
-        updateTotal();
-    }
-    
     // Detail products
 
     $('#tblProducts tbody')
@@ -683,23 +482,6 @@ $(function () {
             return validate_text_box({'event': e, 'type': 'decimals'});
         });
 
-    input_cash
-        .TouchSpin({
-            min: 0.00,
-            max: 100000000,
-            step: 0.01,
-            decimals: 2,
-            boostat: 5,
-            maxboostedstep: 10
-        })
-        .off('change')
-        .on('change touchspin.on.min touchspin.on.max', function () {
-            sale.calculateInvoice();
-        })
-        .on('keypress', function (e) {
-            return validate_text_box({'event': e, 'type': 'decimals'});
-        });
-
     input_discount_value
         .TouchSpin({
             min: 0.00,
@@ -711,11 +493,14 @@ $(function () {
         })
         .off('change')
         .on('change touchspin.on.min touchspin.on.max', function () {
-            sale.calculateInvoice();
+            PosCart.refresh();
         })
         .on('keypress', function (e) {
             return validate_text_box({'event': e, 'type': 'decimals'});
         });
+
+    select_switch_discount.on('change', function () { PosCart.refresh(); });
+    select_switch_cortesia.on('change', function () { PosCart.refresh(); });
 
     input_date_joined.datetimepicker({
         useCurrent: false,
@@ -727,23 +512,7 @@ $(function () {
     $('#frmForm').on('submit', function (e) {
         e.preventDefault();
 
-        let products = [];
-        $('#tblProductsBarra tbody tr').each(function () {
-            const row = $(this);
-            const id = row.data('id');  // lo agregaremos más abajo
-            const qty = parseInt(row.find('.input-qty').val());
-            const priceText = row.find('.price-display').text().replace(/[^0-9]/g, '');
-            const total = parseInt(priceText);
-            const unitPrice = total / qty;
-
-            products.push({
-                id: id,
-                cant: qty,
-                pvp: unitPrice,
-                dscto: 0.00
-            });
-        });
-
+        let products = PosCart.serialize();
 
         if (products.length === 0) {
             return message_error('Debe tener al menos 1 producto en su detalle');

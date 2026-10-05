@@ -9,6 +9,7 @@ class UserForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['groups'].required = True
+        self.fields['groups'].label = 'Roles'
         self.fields['names'].widget.attrs['autofocus'] = True
 
     class Meta:

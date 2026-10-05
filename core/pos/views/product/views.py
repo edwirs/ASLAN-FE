@@ -1,14 +1,51 @@
 import json
 
+from django.db import transaction
 from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView, CreateView, UpdateView, TemplateView
 
 from core.pos.forms import ProductForm
 from core.pos.models import Product
+from core.pos.presentations import parse_presentations, sync_presentations
 from core.security.mixins import GroupPermissionMixin
 
 MODULE_NAME = 'Productos'
+
+
+class PresentationsMixin:
+    """Guarda el producto y sus presentaciones en una sola transacción."""
+
+    def save_with_presentations(self, request):
+        form = self.get_form()
+        with transaction.atomic():
+            if not form.is_valid():
+                return {'error': '; '.join(f'{f}: {" ".join(e)}' for f, e in form.errors.items())}
+            # Con el switch apagado las presentaciones guardadas se conservan (por si se reactiva)
+            # pero no se ofrecen en ninguna venta ni se validan los datos del editor.
+            uses = form.cleaned_data.get('uses_presentations')
+            rows = parse_presentations(request.POST.get('presentations'), product=form.instance,
+                                       mode=form.cleaned_data.get('presentation_mode')) if uses else None
+            if uses and not rows:
+                raise ValueError('Agregue al menos una presentación o apague "¿Maneja presentaciones?".')
+            data = form.save()
+            if 'error' in data:
+                transaction.set_rollback(True)
+                return data
+            if uses:
+                sync_presentations(form.instance, rows)
+        return data
+
+    def presentations_context(self):
+        product = getattr(self, 'object', None)
+        rows = []
+        if product is not None and product.pk:
+            rows = [{
+                'id': p.pk, 'name': p.name, 'factor': float(p.factor), 'pvp': float(p.pvp),
+                'price': float(p.price), 'barcode': p.barcode or '', 'is_active': p.is_active,
+                'stock': float(p.stock),
+            } for p in product.presentations.all().order_by('factor', 'id')]
+        return rows
 
 
 class ProductListView(GroupPermissionMixin, TemplateView):
@@ -21,8 +58,11 @@ class ProductListView(GroupPermissionMixin, TemplateView):
         try:
             if action == 'search':
                 data = []
-                for i in Product.objects.all():
-                    data.append(i.toJSON())
+                for i in Product.objects.prefetch_related('presentations'):
+                    item = i.toJSON()
+                    item['presentations_count'] = len([p for p in i.presentations.all() if p.is_active]) if i.uses_presentations else 0
+                    item['stock_summary'] = i.stock_summary()
+                    data.append(item)
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
@@ -38,7 +78,7 @@ class ProductListView(GroupPermissionMixin, TemplateView):
         return context
 
 
-class ProductCreateView(GroupPermissionMixin, CreateView):
+class ProductCreateView(PresentationsMixin, GroupPermissionMixin, CreateView):
     template_name = 'product/create.html'
     model = Product
     form_class = ProductForm
@@ -50,7 +90,7 @@ class ProductCreateView(GroupPermissionMixin, CreateView):
         action = request.POST['action']
         try:
             if action == 'add':
-                data = self.get_form().save()
+                data = self.save_with_presentations(request)
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
@@ -59,6 +99,7 @@ class ProductCreateView(GroupPermissionMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['presentations'] = self.presentations_context()
         context['title'] = 'Nuevo registro de un Producto'
         context['list_url'] = self.success_url
         context['action'] = 'add'
@@ -66,7 +107,7 @@ class ProductCreateView(GroupPermissionMixin, CreateView):
         return context
 
 
-class ProductUpdateView(GroupPermissionMixin, UpdateView):
+class ProductUpdateView(PresentationsMixin, GroupPermissionMixin, UpdateView):
     template_name = 'product/create.html'
     model = Product
     form_class = ProductForm
@@ -82,7 +123,7 @@ class ProductUpdateView(GroupPermissionMixin, UpdateView):
         action = request.POST['action']
         try:
             if action == 'edit':
-                data = self.get_form().save()
+                data = self.save_with_presentations(request)
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:
@@ -91,6 +132,7 @@ class ProductUpdateView(GroupPermissionMixin, UpdateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        context['presentations'] = self.presentations_context()
         context['title'] = 'Edición de un Producto'
         context['list_url'] = self.success_url
         context['action'] = 'edit'

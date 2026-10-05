@@ -8,6 +8,7 @@ from django.db import transaction
 from core.pos.forms import *
 from core.pos.forms import OrderBarraForm
 from core.pos.models import Table, Order, OrderDetail, InventoryGroup, Product, Company, Client, Sale, SaleDetail
+from core.pos.stock_lines import deduct_line, resolve_lines
 from core.security.mixins import GroupPermissionMixin
 
 MODULE_NAME = 'Ordenes'
@@ -61,7 +62,7 @@ class OrderListView(LoginRequiredMixin, TemplateView):
                     sale = Sale()
                     sale.company = company
                     # Buscamos cliente de la orden o el consumidor final
-                    sale.client = order.client if order.client else Client.objects.get(dni='222222222222')
+                    sale.client = order.client if order.client else Client.get_final_consumer()
                     sale.employee = request.user
                     sale.paymentmethod = request.POST.get('paymentmethod')
                     sale.transfermethods = request.POST.get('transfermethods')
@@ -71,35 +72,29 @@ class OrderListView(LoginRequiredMixin, TemplateView):
                     sale.total = float(order.total)
                     sale.save()
 
-                    # 2. Crear Detalles de Venta desde la Orden
-                    for det in order.orderdetail_set.all():
-                        product = det.product
-                        qty = det.cant
-                        # VALIDAR STOCK
-                        if not product.is_service:
-                            if product.stock < qty:
-                                raise Exception(f"No hay suficiente stock del producto '{product.name}'. Stock disponible: {product.stock}")
-
+                    # 2. Crear Detalles de Venta desde la Orden (precio, presentación y tipo de stock tal como se pidieron)
+                    order_details = list(order.orderdetail_set.select_related('product'))
+                    lines = resolve_lines([{
+                        'id': d.product_id, 'presentation_id': d.presentation_id, 'presentation_name': d.presentation_name,
+                        'cant': d.cant, 'price': d.price, 'factor': d.factor, 'own_stock': d.own_stock,
+                    } for d in order_details], snapshot=True)  # valida el stock (sumando líneas) antes de facturar
+                    for line in lines:
+                        product = line['product']
                         sd = SaleDetail()
                         sd.sale = sale
-                        sd.product = det.product
-                        sd.cant = det.cant
-                        sd.price = det.price
+                        sd.product = product
+                        sd.presentation = line['presentation']
+                        sd.presentation_name = line['presentation_name']
+                        sd.factor = line['factor']
+                        sd.own_stock = line['own_stock']
+                        sd.cost = product.cost_per_sale_unit(line['presentation'], line['factor'], line['own_stock'])
+                        sd.cant = line['cant']
+                        sd.price = line['price']
                         # Lógica de IVA según el producto
-                        sd.iva = 0.19 if det.product.with_tax else 0 
-                        sd.total = float(det.cant * det.price)
+                        sd.iva = 0.19 if product.with_tax else 0
+                        sd.total = float(line['cant'] * line['price'])
                         sd.save()
-                        product.stock -= det.cant
-                        product.save()
-
-                        # Manejo de productos automáticos
-                        auto_products = ProductAutoAdd.objects.filter(trigger_product=product)
-                        for auto in auto_products:
-                            auto_product = auto.auto_product
-
-                            # Descontar del inventario general del producto automático
-                            auto_product.stock -= auto.quantity * int(det.cant)
-                            auto_product.save()
+                        deduct_line(line)
 
                     # 3. Recalcular totales de la venta
                     sale.calculate_invoice()
@@ -143,13 +138,24 @@ class OrderBarraView(LoginRequiredMixin, TemplateView):
             )
 
         if order:
-            for d in order.orderdetail_set.select_related('product'):
+            for d in order.orderdetail_set.select_related('product', 'presentation'):
+                product = d.product
+                holder = d.presentation if (d.own_stock and d.presentation_id) else product
+                options = product.sale_options()
                 details.append({
-                    'id': d.product.id,
-                    'name': d.product.name,
+                    'id': product.id,
+                    'name': product.name,
                     'cant': d.cant,
                     'pvp': float(d.price),
                     'total': float(d.cant * d.price),
+                    'presentation_id': d.presentation_id,
+                    'presentation_name': d.presentation_name,
+                    'factor': float(d.factor),
+                    'own_stock': d.own_stock,
+                    'stock': float(holder.stock),
+                    'unit': product.unit_name or 'Unidad',
+                    'is_service': product.is_service,
+                    'has_options': len(options) > 1,
                 })
 
         context['order'] = order
@@ -160,16 +166,22 @@ class OrderBarraView(LoginRequiredMixin, TemplateView):
         user_groups = InventoryGroup.objects.filter(userinventorygroup__user=user)
         product_stocks = Product.objects.filter(
             is_active=True
-        ).select_related('category').order_by('id')
-        
+        ).select_related('category').prefetch_related('presentations').order_by('id')
+
         product_data = []
         for p in product_stocks:
             product_data.append({
                 'product': p,
-                'total_stock': float(p.stock),
+                'total_stock': float(p.total_stock()),
             })
 
         context['products_grouped'] = product_data
+        # Solo los productos con presentaciones activas necesitan el selector.
+        context['product_options'] = {
+            p['product'].pk: p['product'].sale_options()
+            for p in product_data
+            if p['product'].uses_presentations and any(x.is_active for x in p['product'].presentations.all())
+        }
 
         context['client'] = order.client if order and order.client else None
         context['title'] = f'Mesa # {table.id} / Cliente: {order.client}'
@@ -194,23 +206,21 @@ class OrderCreateView(GroupPermissionMixin, CreateView):
                     products = json.loads(request.POST.get('products'))
                     order = Order.objects.get(id=order_id)
 
+                    # Valida stock y presentación (el precio sale del catálogo); el stock se descuenta al facturar
+                    lines = resolve_lines(products)
                     order.orderdetail_set.all().delete()
                     total = 0
-                    for item in products:
-                        product = Product.objects.get(id=item['id'])
-                        qty = int(item['cant'])
-                        # VALIDAR STOCK
-                        if not product.is_service:
-                            if product.stock < qty:
-                                raise Exception(f"No hay suficiente stock del producto '{product.name}'. Stock disponible: {product.stock}")
-
-                        subtotal = item['cant'] * item['pvp']
-                        total += subtotal
+                    for line in lines:
+                        total += line['cant'] * line['price']
                         OrderDetail.objects.create(
                             order=order,
-                            product_id=item['id'],
-                            cant=item['cant'],
-                            price=item['pvp']
+                            product=line['product'],
+                            presentation=line['presentation'],
+                            presentation_name=line['presentation_name'],
+                            factor=line['factor'],
+                            own_stock=line['own_stock'],
+                            cant=line['cant'],
+                            price=line['price'],
                         )
                     order.total = total
                     order.observations = observations

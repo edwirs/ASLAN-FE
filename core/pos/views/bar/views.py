@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import Group
@@ -10,6 +11,7 @@ from django.views import View
 from django.views.generic import CreateView, DeleteView, FormView, TemplateView
 
 from core.pos.forms import *
+from core.pos.stock_lines import deduct_line, resolve_lines
 from core.pos.utilities import printer
 from core.reports.forms import ReportForm
 from core.security.mixins import GroupPermissionMixin
@@ -37,16 +39,28 @@ class BarCreateView(GroupPermissionMixin, CreateView):
                         sale.employee_id = request.POST.get('employee')
                     else:
                         sale.employee_id = request.user.id
-                    sale.client = Client.objects.get(dni='222222222222')
+                    sale.client = Client.get_final_consumer()
                     sale.iva = iva
                     sale.dscto = float(request.POST['dscto']) / 100
-                    sale.cash = float(0)
-                    sale.change = float(0)
+                    # Método de pago: mismos campos y reglas que el módulo Ventas
+                    sale.cash = float(request.POST.get('cash') or 0)
+                    sale.change = float(request.POST.get('change') or 0)
+                    sale.propina = float(request.POST.get('propina') or 0)
                     sale.paymentmethod = (request.POST['paymentmethod'])
                     if sale.paymentmethod == 'transfer':
                         sale.transfermethods = (request.POST['transfermethods'])
+                    elif sale.paymentmethod == 'mixto':
+                        sale.nequi_value = float(request.POST.get('nequi_value') or 0)
+                        sale.daviplata_value = float(request.POST.get('daviplata_value') or 0)
                     else:
                         sale.transfermethods = None
+                    sale.typemethods = request.POST.get('typemethods') or 'fullpayment'
+                    if sale.typemethods == 'credit':
+                        sale.expiration_date = request.POST.get('expiration_date') or None
+                        if not sale.expiration_date:
+                            raise Exception('Ingrese la fecha de vencimiento de la venta a crédito.')
+                    else:
+                        sale.expiration_date = None
 
                     if request.POST.get('switchDescuento') == 'on':
                         sale.autorization_discount = (request.POST['autorization_discount'])
@@ -59,38 +73,29 @@ class BarCreateView(GroupPermissionMixin, CreateView):
                     if description:
                         sale.description = description
                     sale.save()
-                    for i in json.loads(request.POST['products']):
-                        product = Product.objects.get(pk=i['id'])
+                    lines = resolve_lines(json.loads(request.POST['products']))
+                    for line in lines:
+                        product, presentation = line['product'], line['presentation']
+                        qty, factor, base_units = line['cant'], line['factor'], line['base_units']
 
-                        qty = int(i['cant'])
-                        # VALIDAR STOCK
-                        if not product.is_service:
-                            if product.stock < qty:
-                                raise Exception(f"No hay suficiente stock del producto '{product.name}'. Stock disponible: {product.stock}")
-
-                        # Crear detalle de venta
+                        # Crear detalle de venta (precio siempre desde el catálogo, no desde el navegador)
                         detail = SaleDetail()
                         detail.sale_id = sale.id
                         detail.product_id = product.id
-                        detail.cant = int(i['cant'])
-                        detail.price = float(i['pvp'])
-                        detail.dscto = float(i['dscto']) / 100
+                        detail.presentation = presentation
+                        detail.presentation_name = line['presentation_name']
+                        detail.factor = factor
+                        detail.own_stock = line['own_stock']
+                        detail.cost = product.cost_per_sale_unit(presentation, factor, line['own_stock'])
+                        detail.cant = qty
+                        detail.price = float(line['price'])
+                        detail.dscto = float(line['dscto']) / 100
                         detail.save()
 
                         sale.calculate_detail()
 
-                        # Descontar del inventario general
-                        product.stock -= detail.cant
-                        product.save()
-
-                        # Manejo de productos automáticos
-                        auto_products = ProductAutoAdd.objects.filter(trigger_product=product)
-                        for auto in auto_products:
-                            auto_product = auto.auto_product
-
-                            # Descontar del inventario general del producto automático
-                            auto_product.stock -= auto.quantity * int(i['cant'])
-                            auto_product.save()
+                        # Descontar del inventario (stock del producto o de la variante) y de los descuentos automáticos
+                        deduct_line(line)
                     sale.calculate_invoice()
                     # Aplicar descuento personalizado (después de calcular total)
                     discount_value = float(request.POST.get('discount_value', 0))
@@ -119,13 +124,18 @@ class BarCreateView(GroupPermissionMixin, CreateView):
                     item['total_dscto'] = '0.00'
                     data.append(item)
             elif action == 'search_product_barcode':
-                barcode = request.POST.get('barcode')
-
-                try:
-                    product = Product.objects.get(barcode=barcode)
-                    return JsonResponse(product.toJSON(), safe=False)
-                except Product.DoesNotExist:
+                barcode = (request.POST.get('barcode') or '').strip()
+                presentation = ProductPresentation.objects.select_related('product').filter(
+                    barcode=barcode, is_active=True, product__is_active=True,
+                    product__uses_presentations=True).first()
+                if presentation:
+                    item = presentation.product.toJSON()
+                    item['presentation'] = presentation.toOption(presentation.product.has_own_stock_variants())
+                    return JsonResponse(item, safe=False)
+                product = Product.objects.filter(barcode=barcode, is_active=True).first()
+                if product is None:
                     return JsonResponse({'error': 'Producto no encontrado'})
+                return JsonResponse(product.toJSON(), safe=False)
             elif action == 'search_client':
                 data = []
                 term = request.POST['term']
@@ -164,7 +174,7 @@ class BarCreateView(GroupPermissionMixin, CreateView):
         # product_stocks = ProductInventoryGroupStock.objects.filter(group__in=user_groups).select_related('product', 'group').order_by('product__id')
         product_stocks = Product.objects.filter(
             is_active=True
-        ).select_related('category').order_by('id')
+        ).select_related('category').prefetch_related('presentations').order_by('id')
         # Crear una estructura tipo: { product_id: {'product': ..., 'total_stock': ..., 'by_group': [...] } }
         product_data = {}
         for ps in product_stocks:
@@ -175,10 +185,16 @@ class BarCreateView(GroupPermissionMixin, CreateView):
                     'total_stock': 0,
                     'by_group': []
                 }
-            product_data[pid]['total_stock'] += ps.stock
+            product_data[pid]['total_stock'] += ps.total_stock()
             product_data[pid]['by_group'].append({'group': ps.name, 'stock': ps.stock})
 
         context['products_grouped'] = product_data.values()
 
         context['products'] = Product.objects.filter(Q(stock__gt=0) | Q(is_service=True)).order_by('id')
+        # Solo los productos con presentaciones activas necesitan el selector en el POS.
+        context['product_options'] = {
+            p.pk: p.sale_options()
+            for p in Product.objects.filter(is_active=True, uses_presentations=True,
+                                            presentations__is_active=True).distinct()
+        }
         return context

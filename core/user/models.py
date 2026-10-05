@@ -8,6 +8,7 @@ from django.forms.models import model_to_dict
 from django.utils import timezone
 
 from config import settings
+from core.security.registry import perms_for
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -80,3 +81,5 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         verbose_name = 'Usuario'
         verbose_name_plural = 'Usuarios'
+        default_permissions = ()
+        permissions = perms_for('user.User')

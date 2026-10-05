@@ -51,8 +51,46 @@ var buy = {
         this.detail.products.push(item);
         this.listProducts();
     },
+    // Agrega un producto; si maneja presentaciones pregunta cuál se está comprando.
+    // Devuelve true si se agregó de inmediato (false = quedó esperando la elección).
+    pick: function (product) {
+        var options = product.options || [];
+        if (options.length > 1) {
+            buyChooser(product, options);
+            return false;
+        }
+        this.addPresentation(product, options[0] || {presentation_id: null, name: '', factor: 1, price: product.price});
+        return true;
+    },
+    addPresentation: function (product, opt) {
+        var hasOptions = (product.options || []).length > 1;
+        var existing = this.detail.products.filter(function (v) {
+            return v.id === product.id && (v.presentation_id || null) === (opt.presentation_id || null);
+        })[0];
+        if (existing) {
+            existing.cant += 1;
+            this.listProducts();
+            return;
+        }
+        var item = $.extend({}, product);
+        item.cant = 1;
+        item.dscto = parseFloat(item.dscto) || 0;
+        item.presentation_id = opt.presentation_id || null;
+        item.presentation_name = hasOptions ? opt.name : '';
+        item.factor = opt.factor;
+        item.price = Math.max(parseFloat(opt.price) || 0, 1);
+        item.has_options = hasOptions;
+        if (opt.own_stock) {
+            item.stock = opt.stock;  // variante con stock propio: se muestra el de esa variante
+        }
+        if (hasOptions) {
+            item.short_name = product.short_name + ' - ' + opt.name;
+        }
+        this.addProduct(item);
+    },
     getProductIds: function () {
-        return this.detail.products.map(value => value.id);
+        // Un producto con presentaciones puede repetirse (caja y six pack en la misma compra).
+        return this.detail.products.filter(value => !value.has_options).map(value => value.id);
     },
     listProducts: function () {
         this.calculateInvoice();
@@ -307,8 +345,7 @@ $(function () {
         select: function (event, ui) {
             event.preventDefault();
             $(this).blur();
-            ui.item.cant = 1;
-            buy.addProduct(ui.item);
+            buy.pick(ui.item);
             $(this).val('').focus();
         }
     });
@@ -396,9 +433,10 @@ $(function () {
         .on('click', 'a[rel="add"]', function () {
             var tr = tblSearchProducts.cell($(this).closest('td, li')).index();
             var row = tblSearchProducts.row(tr.row).data();
-            row.cant = 1;
-            buy.addProduct(row);
-            tblSearchProducts.row(tr.row).remove().draw();
+            var added = buy.pick(row);
+            if (added) {
+                tblSearchProducts.row(tr.row).remove().draw();
+            }
         });
 
     // Detail products
@@ -506,3 +544,34 @@ $(function () {
         submit_with_formdata(args);
     });
 });
+
+// ---- Selector de presentación (compras) ---------------------------------
+var chooserModal = null;
+
+function buyChooser(product, options) {
+    var money = function (v) {
+        return v.toLocaleString('es-CO', {style: 'currency', currency: 'COP', minimumFractionDigits: 0});
+    };
+    var esc = function (t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); };
+    var unit = product.unit_name || 'Unidad';
+    $('#presentation_title').text(product.name);
+    $('#presentation_stock').text('Stock actual: ' + parseFloat(product.stock).toLocaleString('es-CO') + ' ' + unit);
+    var list = $('#presentation_options').empty();
+    options.forEach(function (opt) {
+        var btn = $('<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"></button>');
+        btn.html(
+            '<div><div class="fw-bold">' + esc(opt.name) + '</div>' +
+            '<small class="text-muted">' + (opt.own_stock ? 'Stock actual: ' + opt.stock : (opt.factor === 1 ? '1 ' + esc(unit) : 'Contiene ' + opt.factor + ' ' + esc(unit) + ' (suma ' + opt.factor + ' al stock por cada una)')) + '</small></div>' +
+            '<span class="badge bg-secondary rounded-pill fs-6">' + (opt.price > 0 ? money(opt.price) : 'sin costo') + '</span>'
+        );
+        btn.on('click', function () {
+            chooserModal.hide();
+            buy.addPresentation(product, opt);
+        });
+        list.append(btn);
+    });
+    if (!chooserModal) {
+        chooserModal = new bootstrap.Modal(document.getElementById('modalPresentations'));
+    }
+    chooserModal.show();
+}

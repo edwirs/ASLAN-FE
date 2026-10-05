@@ -466,99 +466,8 @@ $(function () {
             tblSearchProducts.row(tr.row).remove().draw();
         });
 
-    $(document).on('click', '.product_card', function() {
-        const productId = $(this).data('id');
-        const name = $(this).data('name');
-        const unitPrice = parseFloat($(this).data('price'));
-        let stock = parseInt($(this).data('stock')) || 0;
-        let is_service = $(this).data('is_service');
-
-        // BLOQUEAR SI NO HAY STOCK
-        if (!is_service && stock <= 0) {
-            console.log('Producto sin stock bloqueado');
-
-            // Opcional: mostrar alerta bonita
-            $.alert({
-                title: 'Sin stock',
-                content: 'Este producto no tiene stock disponible',
-                type: 'red'
-            });
-
-            return;
-        }
-        
-        // Evitar agregar el mismo producto varias veces (opcional)
-        const existingRow = $('#tblProductsBarra tbody tr').filter(function() {
-            return $(this).find('td:first').text() === name;
-        });
-        if (existingRow.length > 0) {
-            // Si ya existe, simplemente aumentar cantidad +1
-            let qtyInput = existingRow.find('.input-qty');
-            qtyInput.val(parseInt(qtyInput.val()) + 1).trigger('change');
-            return;
-        }
-
-        const row = $(`
-            <tr data-id="${productId}">
-                <td>${name}</td>
-                <td style="width: 80px;">
-                    <input type="number" class="form-control form-control-sm input-qty" value="1" min="1">
-                </td>
-                <td>
-                    <span class="price-display">${formatPrice(unitPrice)}</span>
-                    <button class="btn btn-sm btn-danger ms-2 btn-delete" title="Eliminar">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </td>
-            </tr>
-        `);
-        
-        $('#tblProductsBarra tbody').append(row);
-
-        // Al cambiar cantidad
-        row.find('.input-qty').on('change', function() {
-            let qty = parseInt($(this).val());
-            if (isNaN(qty) || qty < 1) {
-                qty = 1;
-                $(this).val(qty);
-            }
-
-            const tr = $(this).closest('tr');
-            const pricePerUnit = parseFloat($(this).closest('tr').data('price') || unitPrice);
-            const totalPrice = qty * pricePerUnit;
-
-            tr.find('.price-display').text(formatPrice(totalPrice));
-            updateTotal();
-        });
-
-        // Botón eliminar
-        row.find('.btn-delete').on('click', function() {
-            row.remove();
-            updateTotal();
-        });
-
-        updateTotal();
-    });
-
-    function formatPrice(value) {
-        return value.toLocaleString('es-CO', {
-            style: 'currency',
-            currency: 'COP',
-            minimumFractionDigits: 0
-        });
-    }
-
-    function updateTotal() {
-        let total = 0;
-        $('#tblProductsBarra tbody tr').each(function() {
-            const priceText = $(this).find('.price-display').text().replace(/[^0-9]/g, '');
-            const price = parseInt(priceText) || 0;
-            total += price;
-        });
-        $('#id_total').val(formatPrice(total));
-    }
-    
-    // Detail products
+    // Carrito (producto + presentación): compartido con la venta rápida
+    PosCart.init();
 
     $('#tblProducts tbody')
         .off()
@@ -650,61 +559,13 @@ $(function () {
     });
 
     if (typeof ORDER_DETAILS !== 'undefined' && ORDER_DETAILS.length > 0) {
-        ORDER_DETAILS.forEach(item => {
-            const row = $(`
-                <tr data-id="${item.id}">
-                    <td>${item.name}</td>
-                    <td style="width: 80px;">
-                        <input type="number"
-                            class="form-control form-control-sm input-qty"
-                            value="${item.cant}"
-                            min="1">
-                    </td>
-                    <td>
-                        <span class="price-display">${formatPrice(item.total)}</span>
-                        <button class="btn btn-sm btn-danger ms-2 btn-delete">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </td>
-                </tr>
-            `);
-
-            $('#tblProductsBarra tbody').append(row);
-
-            // Eventos
-            row.find('.input-qty').on('change', function () {
-                let qty = parseInt($(this).val()) || 1;
-                const total = qty * item.pvp;
-                row.find('.price-display').text(formatPrice(total));
-                updateTotal();
-            });
-
-            row.find('.btn-delete').on('click', function () {
-                row.remove();
-                updateTotal();
-            });
-        });
-
-        updateTotal();
+        PosCart.loadRows(ORDER_DETAILS);
     }
 
 });
 
 function saveOrder() {
-    let products = [];
-
-    $('#tblProductsBarra tbody tr').each(function () {
-        const row = $(this);
-        const qty = parseInt(row.find('.input-qty').val());
-
-        products.push({
-            id: row.data('id'),
-            cant: qty,
-            pvp: parseInt(
-                row.find('.price-display').text().replace(/[^0-9]/g, '')
-            ) / qty
-        });
-    });
+    let products = PosCart.serialize();
 
     if (products.length === 0) {
         message_error('Debe agregar al menos un producto');

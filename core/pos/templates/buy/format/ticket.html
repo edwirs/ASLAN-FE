@@ -173,7 +173,7 @@
         {% for detail in buy.buydetail_set.all %}
             <tr>
                 <td>{{ detail.product.code }}</td>
-                <td>{{ detail.product.name }}</td>
+                <td>{{ detail.display_name }}</td>
                 <td>{{ detail.cant }}</td>
                 <td>{{ detail.price|floatformat:2 }}</td>
                 <td class="text-right">{{ detail.total|floatformat:2 }}</td>

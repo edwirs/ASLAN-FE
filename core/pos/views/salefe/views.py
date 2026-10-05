@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class SaleFeListView(GroupPermissionMixin, FormView):
     template_name = 'salefe/admin/list.html'
     form_class = ReportForm
-    permission_required = 'view_sale'
+    permission_required = 'pos.view_electronic_invoice'
 
     def post(self, request, *args, **kwargs):
         data = {}
@@ -128,7 +128,7 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
     template_name = 'salefe/admin/create.html'
     form_class = SaleForm
     success_url = reverse_lazy('sale_Fe_admin_list')
-    permission_required = 'add_sale'
+    permission_required = 'pos.add_electronic_invoice'
 
     def post(self, request, *args, **kwargs):
         action = request.POST.get('action', '')
@@ -178,6 +178,7 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
                         detail = SaleDetail()
                         detail.sale_id = sale.id
                         detail.product_id = product.id
+                        detail.cost = product.cost_per_sale_unit()
                         detail.cant = int(i['cant'])
                         detail.price = float(i['pvp'])
                         detail.dscto = float(i['dscto']) / 100
@@ -408,7 +409,7 @@ class SaleFeDeleteView(GroupPermissionMixin, DeleteView):
     model = Sale
     template_name = 'delete.html'
     success_url = reverse_lazy('sale_Fe_admin_list')
-    permission_required = 'delete_sale'
+    permission_required = 'pos.delete_electronic_invoice'
 
     def post(self, request, *args, **kwargs):
         data = {}

@@ -55,7 +55,7 @@
                         <th style="width: 30%;">Producto</th>
                         <th style="width: 5%;">Stock</th>
                         <th style="width: 15%;">Cantidad</th>
-                        <th style="width: 15%;">P./Unitario</th>
+                        <th style="width: 15%;">P. compra</th>
                         <th style="width: 10%;">Total</th>
                     </tr>
                     </thead>
@@ -109,6 +109,11 @@
                     <label class="form-label fw-bold">{{ form.transfermethods.label }}:</label>
                     {{ form.transfermethods }}
                 </div>
+                <div class="form-check form-switch mb-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="update_costs" name="update_costs">
+                    <label class="form-check-label fw-bold" for="update_costs">Actualizar costos de los productos</label>
+                </div>
+                <small class="text-muted">Guarda el precio de esta compra como último costo del producto (y de su presentación).</small>
             </div>
         </div>
     </div>
@@ -124,6 +129,23 @@
 {% endblock %}
 
 {% block content_form_before %}
+    <div class="modal fade" id="modalPresentations" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-0" id="presentation_title"></h5>
+                        <small class="text-muted" id="presentation_stock"></small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-2">¿Qué presentación está comprando?</p>
+                    <div class="list-group" id="presentation_options"></div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" tabindex="-1" id="myModalSearchProducts">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">

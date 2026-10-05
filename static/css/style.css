@@ -210,11 +210,23 @@
 }
 
 /* scroll SOLO para productos */
+/* Tarjetas de producto de tamaño fijo: se ven exactamente --rows filas y el resto con scroll */
 .products-scroll{
-    max-height:55vh;
+    --card-h: 200px;
+    --rows: 3;
+    max-height: calc(var(--rows) * var(--card-h) + (var(--rows) - 1) * 1rem + 8px);
     overflow-y:auto;
-    padding-right:5px;
+    padding: 4px 5px 4px 0;
 }
+.products-scroll .product_card { height: var(--card-h) !important; overflow: hidden; margin-bottom: 0; }  /* !important: gana a .h-100 de Bootstrap */
+.products-scroll .product_card .card-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: .25rem;
+}
+.products-scroll .product_card .card-title { margin-bottom: .15rem; }
 
 /* scrollbar mas suave */
 .products-scroll::-webkit-scrollbar{
@@ -275,3 +287,9 @@
 .main-sidebar .nav-icon {
   color: #3b1c0d !important;
 } */
+
+/* Imagen del producto en las tarjetas de venta (o un icono si no tiene): todas del mismo tamaño */
+.product-thumb { position: relative; width: 100%; height: 90px; overflow: hidden; border-radius: .35rem; background: #f4f6f9; margin-bottom: .5rem; }
+.product-thumb img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+.card-no-stock .product-thumb img { filter: grayscale(1); opacity: .6; }
+.product_card .card-body { padding: .6rem; }

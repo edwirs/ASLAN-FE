@@ -27,6 +27,7 @@ from core.pos.choices import CREDIT_NOTE_OPERATION_TYPE
 from core.pos.choices import CREDIT_NOTE_CORRECTION_CONCEPT
 from core.pos.choices import FACTUS_ENVIRONMENT
 from core.user.models import User
+from core.security.registry import perms_for
 
 class Departamento(models.Model):
     nombre = models.CharField(max_length=100)
@@ -60,6 +61,8 @@ class Category(models.Model):
     class Meta:
         verbose_name = 'Categoría'
         verbose_name_plural = 'Categorías'
+        default_permissions = ()
+        permissions = perms_for('pos.Category')
 
 
 class Product(models.Model):
@@ -75,6 +78,19 @@ class Product(models.Model):
     with_tax = models.BooleanField(default=True, verbose_name='¿Se cobra impuesto?')
     stock = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Stock')
     is_active = models.BooleanField(default=True, verbose_name='Estado')
+    unit_name = models.CharField(max_length=30, default='Unidad', verbose_name='Nombre de la unidad base')
+    # Opcional: bajo este nivel el producto se marca "bajo" en los reportes de inventario.
+    # Conversión de unidades: en unidad base. Stock por variante: se aplica a cada variante.
+    min_stock = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True, verbose_name='Stock mínimo')
+    uses_presentations = models.BooleanField(default=False, verbose_name='¿Maneja presentaciones?')
+    MODE_CONVERSION = 'conversion'
+    MODE_VARIANTS = 'variants'
+    PRESENTATION_MODES = (
+        (MODE_CONVERSION, 'Conversión de unidades (un solo stock)'),
+        (MODE_VARIANTS, 'Stock por tamaño o variante'),
+    )
+    presentation_mode = models.CharField(max_length=20, choices=PRESENTATION_MODES, default=MODE_CONVERSION,
+                                         verbose_name='Tipo de presentaciones')
 
     def __str__(self):
         return self.get_full_name()
@@ -101,9 +117,98 @@ class Product(models.Model):
         item['image'] = self.get_image()
         return item
 
+    def cost_per_sale_unit(self, presentation=None, factor=1, own_stock=False):
+        """Costo de UNA unidad vendida (la presentación elegida), para guardarlo en el detalle de la venta.
+
+        None = no se conoce (producto sin precio de compra).
+        """
+        if own_stock and presentation is not None:
+            cost = presentation.price
+        else:
+            cost = self.price * Decimal(str(factor))
+        return cost.quantize(Decimal('0.01')) if cost and cost > 0 else None
+
+    def has_own_stock_variants(self):
+        """¿Cada presentación lleva su propio stock (modo variantes)?"""
+        return self.uses_presentations and self.presentation_mode == self.MODE_VARIANTS
+
+    def sale_options(self):
+        """Formas de vender el producto: la unidad base y, si maneja presentaciones, las activas.
+
+        Modo conversión: ``factor`` = cuántas unidades base descuenta del stock cada unidad vendida.
+        Modo variantes: cada opción (incluida la base) tiene su propio ``stock`` y el factor es 1.
+        """
+        own = self.has_own_stock_variants()
+        options = [{
+            'presentation_id': None, 'name': self.unit_name or 'Unidad', 'factor': 1.0,
+            'pvp': float(self.pvp), 'price': float(self.price), 'barcode': self.barcode, 'is_base': True,
+            'own_stock': own, 'stock': float(self.stock) if own else None,
+        }]
+        if self.uses_presentations:
+            order = ('id',) if own else ('factor', 'id')
+            options += [p.toOption(own) for p in self.presentations.filter(is_active=True).order_by(*order)]
+        return options
+
+    def stock_summary(self):
+        """Stock listo para mostrar: {'mode', 'total', 'unit', 'items': [{'name', 'stock'}]}."""
+        if self.is_service:
+            return {'mode': 'service', 'total': None, 'unit': '', 'items': []}
+        if self.has_own_stock_variants():
+            items = [{'name': self.unit_name or 'Unidad', 'stock': float(self.stock)}]
+            items += [{'name': p.name, 'stock': float(p.stock)}
+                      for p in sorted((p for p in self.presentations.all() if p.is_active), key=lambda p: p.id)]
+            return {'mode': 'variants', 'total': sum(i['stock'] for i in items), 'unit': '', 'items': items}
+        items = []
+        if self.uses_presentations:
+            # Cuántas de cada presentación caben hoy en el stock (solo enteras)
+            for p in sorted((p for p in self.presentations.all() if p.is_active), key=lambda p: (-p.factor, p.id)):
+                items.append({'name': p.name, 'stock': int(self.stock // p.factor) if p.factor else 0})
+        return {'mode': 'conversion', 'total': float(self.stock), 'unit': self.unit_name or 'Unidad', 'items': items}
+
+    def total_stock(self):
+        """Unidades vendibles en total (suma de variantes, o stock base en conversión)."""
+        if self.has_own_stock_variants():
+            return self.stock + sum((p.stock for p in self.presentations.all() if p.is_active), Decimal(0))
+        return self.stock
+
     class Meta:
         verbose_name = 'Producto'
         verbose_name_plural = 'Productos'
+        default_permissions = ()
+        permissions = perms_for('pos.Product')
+
+
+class ProductPresentation(models.Model):
+    """Forma adicional de vender un producto (caja, six pack, media...).
+
+    El stock del producto siempre se lleva en su unidad base. ``factor`` indica cuántas unidades
+    base contiene la presentación: vender 2 "Caja x12" descuenta 24 del stock.
+    """
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='presentations')
+    name = models.CharField(max_length=50, verbose_name='Presentación')
+    factor = models.DecimalField(max_digits=9, decimal_places=3, default=1, verbose_name='Unidades base que contiene')
+    price = models.DecimalField(max_digits=11, decimal_places=2, default=0.00, verbose_name='Precio de Compra')
+    pvp = models.DecimalField(max_digits=11, decimal_places=2, default=0.00, verbose_name='Precio de Venta')
+    barcode = models.CharField(max_length=50, null=True, blank=True, unique=True, verbose_name='Código de Barras')
+    # Solo se usa en el modo "Stock por tamaño o variante"; en conversión el stock es el del producto.
+    stock = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Stock propio')
+    is_active = models.BooleanField(default=True, verbose_name='Estado')
+
+    def __str__(self):
+        return f'{self.product.name} - {self.name}'
+
+    def toOption(self, own_stock=False):
+        return {
+            'presentation_id': self.pk, 'name': self.name, 'factor': 1.0 if own_stock else float(self.factor),
+            'pvp': float(self.pvp), 'price': float(self.price), 'barcode': self.barcode, 'is_base': False,
+            'own_stock': own_stock, 'stock': float(self.stock) if own_stock else None,
+        }
+
+    class Meta:
+        verbose_name = 'Presentación'
+        verbose_name_plural = 'Presentaciones'
+        default_permissions = ()
+        unique_together = ('product', 'name')
 
 
 class Company(models.Model):
@@ -145,9 +250,7 @@ class Company(models.Model):
         verbose_name = 'Compañia'
         verbose_name_plural = 'Compañias'
         default_permissions = ()
-        permissions = (
-            ('view_company', 'Can view Empresa'),
-        )
+        permissions = perms_for('pos.Company')
 
 class DocumentType(models.Model):
     name = models.CharField(max_length=100, verbose_name='Nombre')
@@ -198,6 +301,20 @@ class Client(models.Model):
     def __str__(self):
         return self.get_full_name()
 
+    FINAL_CONSUMER_DNI = '222222222222'
+
+    @classmethod
+    def get_final_consumer(cls):
+        """Cliente "Consumidor final" (documento 222222222222); se crea si el tenant aún no lo tiene."""
+        client = cls.objects.filter(dni=cls.FINAL_CONSUMER_DNI).first()
+        if client is None:
+            document_type = DocumentType.objects.filter(code='13').first() or DocumentType.objects.first()
+            if document_type is None:
+                raise Exception('No hay tipos de documento configurados para crear el cliente Consumidor final.')
+            client = cls.objects.create(document_type=document_type, dni=cls.FINAL_CONSUMER_DNI,
+                                        names='CONSUMIDOR FINAL')
+        return client
+
     def get_full_name(self):
         doc_abbr = self.document_type.abbreviation if self.document_type else ''
         if self.dv:
@@ -230,12 +347,7 @@ class Client(models.Model):
         verbose_name_plural = 'Clientes'
         ordering = ['id']
         default_permissions = ()
-        permissions = (
-            ('view_client', 'Ver Cliente'),
-            ('add_client', 'Agregar Cliente'),
-            ('change_client', 'Editar Cliente'),
-            ('delete_client', 'Eliminar Cliente'),
-        )
+        permissions = perms_for('pos.Client')
 
 class ClientContact(models.Model):
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='contacts', verbose_name="Cliente")
@@ -275,6 +387,8 @@ class Provider(models.Model):
     class Meta:
         verbose_name = 'Proveedor'
         verbose_name_plural = 'Proveedores'
+        default_permissions = ()
+        permissions = perms_for('pos.Provider')
 
 class Sale(models.Model):
     company = models.ForeignKey(Company, on_delete=models.PROTECT, verbose_name='Compañia')
@@ -417,26 +531,19 @@ class Sale(models.Model):
         verbose_name = 'Venta'
         verbose_name_plural = 'Ventas'
         default_permissions = ()
-        permissions = (
-            ('view_sale', 'Can view Venta'),
-            ('add_sale', 'Can add Venta'),
-            ('add_bar', 'Can add Venta Barra'),
-            ('delete_sale', 'Can delete Venta'),
-            ('view_sale_client', 'Can view_sale_client Venta'),
-            ('delivered_sale', 'Can delivered Venta'),
-            ('discounts_sale', 'Can discounts Venta'),
-            ('report_sales_menu', 'can view sales report'),
-            ('report_employee_menu', 'can view sales employee report'),
-            ('report_employee_debe', 'can view sales employee debe report'),
-            ('report_employee_gain', 'can view employee gain report'),
-            ('sale_by_product', 'can view sales by product report'),
-            ('list_employee', 'can view list employee'),
-        )
+        permissions = perms_for('pos.Sale')
 
 
 class SaleDetail(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    # Presentación vendida; nombre y factor quedan copiados por si luego se edita o borra.
+    presentation = models.ForeignKey('ProductPresentation', on_delete=models.SET_NULL, null=True, blank=True)
+    presentation_name = models.CharField(max_length=50, blank=True, default='')
+    factor = models.DecimalField(max_digits=9, decimal_places=3, default=1)
+    own_stock = models.BooleanField(default=False)  # True: descontó del stock propio de la presentación
+    # Costo de una unidad vendida al momento de la venta (para márgenes exactos); None = desconocido
+    cost = models.DecimalField(max_digits=11, decimal_places=2, null=True, blank=True)
     cant = models.IntegerField(default=0)
     price = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     price_with_vat = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
@@ -451,12 +558,19 @@ class SaleDetail(models.Model):
     def __str__(self):
         return self.product.name
 
+    def display_name(self):
+        if self.presentation_name:
+            return f'{self.product.name} - {self.presentation_name}'
+        return self.product.name
+
     def get_iva_percent(self):
         return int(self.iva * 100)
 
     def toJSON(self):
         item = model_to_dict(self, exclude=['sale'])
         item['product'] = self.product.toJSON()
+        item['factor'] = float(self.factor)
+        item['display_name'] = self.display_name()
         item['price'] = float(self.price)
         item['price_with_vat'] = float(self.price_with_vat)
         item['subtotal'] = float(self.subtotal)
@@ -538,12 +652,7 @@ class Price(models.Model):
         verbose_name = 'Cotización'
         verbose_name_plural = 'Cotizaciones'
         default_permissions = ()
-        permissions = (
-            ('view_price', 'Can view Cotizacion'),
-            ('add_price', 'Can add Cotizacion'),
-            ('delete_price', 'Can delete Cotizacion'),
-            ('view_price_client', 'Can view_price_client Cotizacion'),
-        )
+        permissions = perms_for('pos.Price')
 
 
 class PriceDetail(models.Model):
@@ -655,17 +764,17 @@ class Buy(models.Model):
         verbose_name = 'Compra'
         verbose_name_plural = 'Compras'
         default_permissions = ()
-        permissions = (
-            ('view_buy', 'Can view Compra'),
-            ('add_buy', 'Can add Compra'),
-            ('delete_buy', 'Can delete Compra'),
-            ('view_buy_provider', 'Can view_buy_provider Compra'),
-        )
+        permissions = perms_for('pos.Buy')
 
 
 class BuyDetail(models.Model):
     buy_id = models.ForeignKey(Buy, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    # Presentación comprada; nombre y factor quedan copiados por si luego se edita o borra.
+    presentation = models.ForeignKey('ProductPresentation', on_delete=models.SET_NULL, null=True, blank=True)
+    presentation_name = models.CharField(max_length=50, blank=True, default='')
+    factor = models.DecimalField(max_digits=9, decimal_places=3, default=1)
+    own_stock = models.BooleanField(default=False)  # True: subió el stock propio de la presentación
     cant = models.IntegerField(default=0)
     price = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     price_with_vat = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
@@ -680,12 +789,19 @@ class BuyDetail(models.Model):
     def __str__(self):
         return self.product.name
 
+    def display_name(self):
+        if self.presentation_name:
+            return f'{self.product.name} - {self.presentation_name}'
+        return self.product.name
+
     def get_iva_percent(self):
         return int(self.iva * 100)
 
     def toJSON(self):
         item = model_to_dict(self, exclude=['buy'])
         item['product'] = self.product.toJSON()
+        item['factor'] = float(self.factor)
+        item['display_name'] = self.display_name()
         item['price'] = float(self.price)
         item['price_with_vat'] = float(self.price_with_vat)
         item['subtotal'] = float(self.subtotal)
@@ -724,12 +840,7 @@ class Expenses(models.Model):
         verbose_name = 'Gasto'
         verbose_name_plural = 'Gastos'
         default_permissions = ()
-        permissions = (
-            ('view_bill', 'Can view Gasto'),
-            ('add_expenses', 'Can Add Gasto'),
-            ('change_expenses', 'Can Update Gasto'),
-            ('delete_expenses', 'Can Delete Gasto'),
-        )
+        permissions = perms_for('pos.Expenses')
 
 class ProductAutoAdd(models.Model):
     trigger_product = models.ForeignKey(Product, related_name='auto_triggers', on_delete=models.CASCADE, verbose_name='Producto base')
@@ -738,6 +849,10 @@ class ProductAutoAdd(models.Model):
 
     def __str__(self):
         return f'{self.trigger_product} -> {self.auto_product} (x{self.quantity})'
+
+    class Meta:
+        default_permissions = ()
+        permissions = perms_for('pos.ProductAutoAdd')
     
 class SaleCreditPayment(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE)
@@ -761,6 +876,7 @@ class SaleCreditPayment(models.Model):
         verbose_name = 'Pago Crédito'
         verbose_name_plural = 'Pagos Créditos'
         default_permissions = ()
+        permissions = perms_for('pos.SaleCreditPayment')
 
 class Employee(models.Model):
     dni = models.CharField(max_length=13, unique=True, verbose_name='Número de cedula')
@@ -788,6 +904,8 @@ class Employee(models.Model):
         verbose_name = 'Empleado'
         verbose_name_plural = 'Empleados'
         ordering = ['names']
+        default_permissions = ()
+        permissions = perms_for('pos.Employee')
 
     def __str__(self):
         return f"{self.names}"
@@ -896,6 +1014,8 @@ class Payroll(models.Model):
         verbose_name = 'Nomina'
         verbose_name_plural = 'Nominas'
         ordering = ['-period', 'period_type']
+        default_permissions = ()
+        permissions = perms_for('pos.Payroll')
 
     def __str__(self):
         return f"Payroll {self.get_period_type_display()} {self.period.strftime('%Y-%m')} - {self.employee.first_name}"
@@ -946,6 +1066,10 @@ class InventoryGroup(models.Model):
 
     def __str__(self):
         return self.name
+
+    class Meta:
+        default_permissions = ()
+        permissions = perms_for('pos.InventoryGroup')
     
 class UserInventoryGroup(models.Model):
     user = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name='Empleado')
@@ -980,6 +1104,8 @@ class Table(models.Model):
     class Meta:
         verbose_name = 'Mesa'
         verbose_name_plural = 'Mesas'
+        default_permissions = ()
+        permissions = perms_for('pos.Table')
 
 class Order(models.Model):
     table = models.ForeignKey(Table, on_delete=models.PROTECT)
@@ -1004,18 +1130,24 @@ class Order(models.Model):
         verbose_name = 'Orden'
         verbose_name_plural = 'Órdenes'
         default_permissions = ()
-        permissions = (
-            ('view_order', 'Puede ver órdenes'),
-            ('add_order', 'Puede crear órdenes'),
-            ('delete_order', 'Puede eliminar órdenes'),
-        )
+        permissions = perms_for('pos.Order')
 
 class OrderDetail(models.Model):
     order = models.ForeignKey(Order, on_delete=models.CASCADE)
     product = models.ForeignKey(Product, on_delete=models.PROTECT, verbose_name='Producto')
+    # Presentación pedida; nombre, factor y tipo de stock quedan copiados por si luego se edita o borra.
+    presentation = models.ForeignKey('ProductPresentation', on_delete=models.SET_NULL, null=True, blank=True)
+    presentation_name = models.CharField(max_length=50, blank=True, default='')
+    factor = models.DecimalField(max_digits=9, decimal_places=3, default=1)
+    own_stock = models.BooleanField(default=False)
     cant = models.PositiveIntegerField(verbose_name='Cantidad')
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Precio unitario')
     dscto = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='Descuento (%)')
+
+    def display_name(self):
+        if self.presentation_name:
+            return f'{self.product.name} - {self.presentation_name}'
+        return self.product.name
 
     def subtotal(self):
         return round(self.cant * self.price, 2)
@@ -1090,18 +1222,8 @@ class EmployeeTransaction(models.Model):
     class Meta:
         verbose_name = "Movimiento empleado"
         verbose_name_plural = "Movimientos empleados"
-
         default_permissions = ()
-
-        permissions = (
-            ("view_employee_transaction", "Puede ver movimientos empleados"),
-            ("add_employee_transaction", "Puede registrar movimientos empleados"),
-            ("change_employee_transaction", "Puede editar movimientos empleados"),
-            ("delete_employee_transaction", "Puede eliminar movimientos empleados"),
-            ("approve_employee_transaction", "Puede aprobar préstamos"),
-            ("pay_employee_transaction", "Puede registrar pagos"),
-            ("report_employee_transaction", "Puede ver reportes de movimientos"),
-        )
+        permissions = perms_for('pos.EmployeeTransaction')
 
 class EmployeeTransactionDetail(models.Model):
     transaction = models.ForeignKey(EmployeeTransaction, on_delete=models.CASCADE)
@@ -1166,6 +1288,8 @@ class CashClosing(models.Model):
         verbose_name = 'Cierre de Caja'
         verbose_name_plural = 'Cierres de Caja'
         ordering = ['-created_at']
+        default_permissions = ()
+        permissions = perms_for('pos.CashClosing')
 
 class ObservationTemplate(models.Model):
     name = models.CharField(max_length=150, verbose_name='Nombre de la plantilla')
@@ -1317,11 +1441,7 @@ class CreditNote(models.Model):
         verbose_name = 'Nota Crédito'
         verbose_name_plural = 'Notas Crédito'
         default_permissions = ()
-        permissions = (
-            ('view_creditnote', 'Can view Nota Crédito'),
-            ('add_creditnote', 'Can add Nota Crédito'),
-            ('delete_creditnote', 'Can delete Nota Crédito'),
-        )
+        permissions = perms_for('pos.CreditNote')
 
 
 class CreditNoteDetail(models.Model):
@@ -1402,9 +1522,4 @@ class FactusCredential(models.Model):
         verbose_name = 'Credencial de Factus'
         verbose_name_plural = 'Credenciales de Factus'
         default_permissions = ()
-        permissions = (
-            ('view_factuscredential', 'Can view Credencial de Factus'),
-            ('add_factuscredential', 'Can add Credencial de Factus'),
-            ('change_factuscredential', 'Can change Credencial de Factus'),
-            ('delete_factuscredential', 'Can delete Credencial de Factus'),
-        )
+        permissions = perms_for('pos.FactusCredential')

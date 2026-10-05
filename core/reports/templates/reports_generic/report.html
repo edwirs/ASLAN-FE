@@ -1,0 +1,64 @@
+{% extends 'report.html' %}
+{% load static %}
+
+{% block assets_report %}
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highcharts/10.3.3/highcharts.min.js"></script>
+    <script src="{% static 'reports_generic/js/report.js' %}"></script>
+    <style>
+        /* Filtros: cuadrícula que se ajusta sola al ancho, todos del mismo alto */
+        .rpt-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem 1rem; align-items: end;
+            background: #f6f8fa; border: 1px solid #e3e6ea; border-radius: .5rem; padding: .9rem 1rem; margin-bottom: 1rem; }
+        .rpt-filters .f-wide { grid-column: span 2; }
+        @media (max-width: 575px) { .rpt-filters .f-wide { grid-column: span 1; } }
+        .rpt-filters label.f-label { display: block; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; margin-bottom: .25rem; }
+        .rpt-filters .form-control, .rpt-filters .form-select { height: 38px; }
+        .rpt-filters .f-check { display: flex; align-items: center; height: 38px; gap: .5rem; }
+        /* Tarjetas de resumen */
+        .rpt-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+        .kpi-card { border: 1px solid #e3e6ea; border-left: 4px solid #17a2b8; border-radius: .5rem; padding: .7rem 1rem; background: #fff; }
+        .kpi-card .kpi-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; min-height: 2.1em; }
+        .kpi-card .kpi-value { font-size: 1.4rem; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+        .kpi-card.kpi-neg { border-left-color: #dc3545; }
+        /* Tabla */
+        .rpt-section-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin: 1.25rem 0 .5rem; }
+        .rpt-section-title h5 { margin: 0; font-weight: 700; }
+        #tblReport { border-collapse: separate; border-spacing: 0; }
+        #tblReport thead th { background: #f4f6f9; font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; border-bottom: 2px solid #dee2e6; white-space: nowrap; }
+        #tblReport tbody td { vertical-align: middle; padding: .55rem .6rem; }
+        #tblReport td.text-end { white-space: nowrap; }
+        #tblReport tbody tr.has-detail { cursor: pointer; }
+        #tblReport tbody tr.has-detail:hover { background: #f1f8fb; }
+        #tblReport td.ctl { width: 28px; text-align: center; color: #adb5bd; }
+        #tblReport td.ctl i { transition: transform .15s; }
+        #tblReport tr.shown td.ctl i { transform: rotate(90deg); color: #17a2b8; }
+        #tblReport .cell-sub { display: block; font-size: .75rem; color: #6c757d; line-height: 1.2; }
+        #tblReport .cell-neg { color: #dc3545; }
+        .pbar { position: relative; min-width: 90px; height: 22px; background: #eef1f4; border-radius: 4px; overflow: hidden; }
+        .pbar > span { position: absolute; inset: 0 auto 0 0; background: #b9e3ee; }
+        .pbar > b { position: relative; display: block; text-align: right; padding: 0 .4rem; font-size: .8rem; line-height: 22px; }
+        .row-detail { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .5rem 1.5rem; padding: .6rem .5rem .6rem 2rem; background: #f8fafb; }
+        .row-detail .dl { display: block; font-size: .7rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; }
+        .row-detail .dv { font-weight: 600; }
+        .dataTables_wrapper .dt-buttons .btn { margin-right: .35rem; }
+    </style>
+{% endblock %}
+
+{% block content_report %}
+    <div class="rpt-filters" id="report_filters"></div>
+    <div class="rpt-kpis" id="report_kpis"></div>
+    <div class="mb-3" id="report_chart" style="display:none; min-height: 320px;"></div>
+    <div class="mb-3" id="report_summary" style="display:none;"></div>
+
+    <div class="rpt-section-title">
+        <h5><i class="fas fa-table"></i> <span id="table_title">Detalle</span> <small class="text-muted fw-normal" id="report_status"></small></h5>
+        <small class="text-muted" id="table_hint" style="display:none;"><i class="fas fa-hand-pointer"></i> Haga clic en una fila para ver más datos</small>
+    </div>
+    <div class="table-responsive">
+        <table style="width:100%;" class="table table-sm" id="tblReport">
+            <thead></thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <div class="alert alert-light border small mt-3" id="report_notes" style="display:none;"></div>
+    {{ report_config|json_script:"report-config" }}
+{% endblock %}

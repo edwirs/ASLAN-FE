@@ -22,7 +22,7 @@ def kitchen_orders(request):
         items = []
         for d in order.orderdetail_set.all():
             items.append({
-                'product': d.product.name,
+                'product': d.display_name(),
                 'qty': d.cant
             })
 

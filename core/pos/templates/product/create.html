@@ -11,6 +11,7 @@
 {% endblock %}
 
 {% block form_fields %}
+<style>.mode-option.active { border-color: #17a2b8; background: #e8f7fa; }</style>
 <div class="row g-3">
     <div class="col-md-12 col-lg-12">
         <label class="form-label fw-bold">{{ form.name.label }}</label>
@@ -43,9 +44,101 @@
             {{ form.pvp }}
         </div>
         <div class="col-md-6 col-lg-4 mb-3" id="stock">
-            <label class="form-label fw-bold stock">{{ form.stock.label }}</label>
+            <label class="form-label fw-bold stock">{{ form.stock.label }} <small class="text-muted fw-normal base-hint">(en unidad base)</small></label>
             {{ form.stock }}
         </div>
+        <div class="col-md-6 col-lg-4 mb-3">
+            <label class="form-label fw-bold">{{ form.unit_name.label }}</label>
+            {{ form.unit_name }}
+            <small class="text-muted">El precio y el stock de arriba son de esta unidad.</small>
+        </div>
+        <div class="col-md-6 col-lg-4 mb-3" id="min_stock">
+            <label class="form-label fw-bold">{{ form.min_stock.label }} <small class="text-muted fw-normal">(opcional)</small></label>
+            {{ form.min_stock }}
+            <small class="text-muted">Los reportes de inventario avisan cuando el stock llegue a este nivel. Déjelo vacío si no lo necesita. En productos con stock por variante se aplica a cada variante.</small>
+        </div>
+    </div>
+
+    <div class="col-12 mb-4">
+        <div class="card card-outline card-info mb-0" id="presentations_card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title mb-0"><i class="fas fa-boxes-stacked"></i> Presentaciones</h3>
+                <div class="d-flex align-items-center ms-auto">
+                    <div class="form-check form-switch mb-0 d-flex align-items-center gap-2">
+                        {{ form.uses_presentations }}
+                        <label class="form-check-label fw-bold mb-0" for="{{ form.uses_presentations.id_for_label }}">
+                            {{ form.uses_presentations.label }}
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-3 text-muted small" id="presentations_off">
+                Este producto se vende solo por su unidad base. Active el switch para ofrecerlo también por caja,
+                six pack, media, etc.
+            </div>
+            <div class="card-body p-0" id="presentations_body">
+                <div class="px-3 pt-3">
+                    <div class="row g-2 mb-2">
+                        {% for value, label in form.presentation_mode.field.choices %}
+                            <div class="col-md-6">
+                                <label class="mode-option card card-body p-2 mb-0 {% if form.presentation_mode.value|default:'conversion' == value %}active{% endif %}" style="cursor:pointer;">
+                                    <span class="d-flex align-items-start gap-2">
+                                        <input type="radio" class="form-check-input mt-1" name="presentation_mode" value="{{ value }}"
+                                               {% if form.presentation_mode.value|default:'conversion' == value %}checked{% endif %}>
+                                        <span>
+                                            <b>{{ label }}</b><br>
+                                            <small class="text-muted">
+                                                {% if value == 'conversion' %}
+                                                    Un solo inventario que se vende en distintos empaques, pesos o medidas. Ej: unidad y caja, botella y six pack, libra y kilo.
+                                                {% else %}
+                                                    Cada variante tiene su propio inventario y precio. Ej: tallas o colores de una prenda, sabores, tamaños o referencias de un mismo producto.
+                                                {% endif %}
+                                            </small>
+                                        </span>
+                                    </span>
+                                </label>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <p class="text-muted small mb-2 help-conv">
+                        El inventario es uno solo, en <b class="unit-label">{{ form.unit_name.value|default:'Unidad' }}</b>:
+                        cada presentación descuenta del stock las unidades que contiene.
+                    </p>
+                    <p class="text-muted small mb-2 help-var" style="display:none;">
+                        La variante de arriba (<b class="unit-label">{{ form.unit_name.value|default:'Unidad' }}</b>) usa el precio y
+                        el stock de arriba. Agregue las demás abajo, cada una con su propio stock y precio.
+                    </p>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0" id="tblPresentations" style="min-width: 840px;">
+                        <thead>
+                        <tr class="text-muted small text-uppercase">
+                            <th style="min-width:150px">Nombre</th>
+                            <th style="width:120px" class="mode-conv">Contiene <span class="unit-label"></span></th>
+                            <th style="width:110px" class="mode-var">Stock</th>
+                            <th style="width:150px">P. compra</th>
+                            <th style="width:150px">P. venta</th>
+                            <th style="width:150px">Código de barras</th>
+                            <th style="width:110px" class="text-center mode-conv">Precio x unid.</th>
+                            <th style="width:60px" class="text-center">Activa</th>
+                            <th style="width:46px"></th>
+                        </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top">
+                    <button type="button" class="btn btn-sm btn-success" id="btn_add_presentation">
+                        <i class="fas fa-plus"></i> Agregar presentación
+                    </button>
+                </div>
+                <div class="text-center text-muted py-3" id="presentations_empty">
+                    Sin presentaciones: el producto solo se vende por <b class="unit-label">unidad</b>.
+                </div>
+            </div>
+        </div>
+        <input type="hidden" name="presentations" id="id_presentations" value="[]">
+        {{ presentations|json_script:"presentations-data" }}
     </div>
     
     <div class="mb-4">
@@ -72,9 +165,30 @@
         </div>
     </div>
 
-    <div class="col-md-4 col-lg-4">
-        <label class="form-label fw-bold">{{ form.image.label|upper }}</label>
-        {{ form.image }}
+    <div class="col-12">
+        <label class="form-label fw-bold">Imagen del producto <small class="text-muted fw-normal">(opcional)</small></label>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div id="image_preview" class="border rounded d-flex align-items-center justify-content-center bg-light"
+                 style="width: 96px; height: 96px; overflow: hidden;">
+                {% if form.instance.image %}
+                    <img src="{{ form.instance.get_image }}" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                {% else %}
+                    <i class="fas fa-box fa-2x text-muted"></i>
+                {% endif %}
+            </div>
+            <div style="min-width: 260px; flex: 1;">
+                <input type="file" name="image" id="id_image" class="form-control" accept="image/jpeg,image/png,image/webp">
+                <small class="text-muted d-block mt-1">
+                    JPG, PNG o WebP, de máximo 2 MB. Se reduce automáticamente a 400 px para que las ventas carguen rápido.
+                </small>
+                {% if form.instance.image %}
+                    <div class="form-check mt-1">
+                        <input class="form-check-input" type="checkbox" name="image-clear" id="image-clear">
+                        <label class="form-check-label" for="image-clear">Quitar la imagen actual</label>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 

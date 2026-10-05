@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from django.forms import inlineformset_factory
 
 from .models import *
+from .images import ProductImageField
 
 
 class CategoryForm(forms.ModelForm):
@@ -38,10 +39,12 @@ class ProductForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['name'].widget.attrs['autofocus'] = True
+        self.fields['presentation_mode'].required = False
 
     class Meta:
         model = Product
         fields = '__all__'
+        field_classes = {'image': ProductImageField}
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control','placeholder': 'Ingrese un nombre'}),
             'code': forms.TextInput(attrs={'class': 'form-control','placeholder': 'Ingrese un código'}),
@@ -53,8 +56,32 @@ class ProductForm(forms.ModelForm):
             'stock': forms.TextInput(attrs={'name': 'stock'}),
             'is_service': forms.CheckboxInput(attrs={'class': 'form-check-input', 'name': 'is_service'}),
             'with_tax': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'})
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'presentation_mode': forms.RadioSelect(),
+            'min_stock': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '1', 'placeholder': 'Sin mínimo'}),
+            'uses_presentations': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
+            'unit_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: Botella, Unidad, Kilo'}),
+            'image': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/jpeg,image/png,image/webp'}),
         }
+
+    def clean_image(self):
+        """Valida la imagen y la reduce (máx. 400 px, WebP) para que las ventas carguen rápido."""
+        from django.core.files.uploadedfile import UploadedFile
+        from core.pos.images import shrink_image
+        image = self.cleaned_data.get('image')
+        if isinstance(image, UploadedFile):
+            return shrink_image(image)
+        return image
+
+    def clean_presentation_mode(self):
+        return self.cleaned_data.get('presentation_mode') or Product.MODE_CONVERSION
+
+    def clean_barcode(self):
+        from core.pos.presentations import barcode_in_use
+        barcode = (self.cleaned_data.get('barcode') or '').strip() or None
+        if barcode and barcode_in_use(barcode):
+            raise forms.ValidationError('Ese código de barras ya pertenece a la presentación de un producto.')
+        return barcode
 
     def save(self, commit=True):
         data = {}
@@ -755,6 +782,8 @@ class BarForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self.fields['client'].queryset = Client.objects.none()
+        if not self.instance.pk:  # solo en formularios nuevos
+            self.fields['expiration_date'].initial = next_month_day_10()
 
         # Ordenar alfabéticamente por nombre (ajusta al campo correcto)
         self.fields['employee'].queryset = User.objects.all().order_by('names')
@@ -819,6 +848,28 @@ class BarForm(forms.ModelForm):
             'transfermethods': forms.Select(attrs={
                 'class': 'select2',
                 'style': 'width: 100%'
+            }),
+            'typemethods': forms.Select(attrs={
+                'class': 'select2',
+                'style': 'width: 100%'
+            }),
+            'expiration_date': forms.DateInput(format='%Y-%m-%d', attrs={
+                'class': 'form-control datetimepicker-input',
+                'id': 'expiration_date',
+                'data-toggle': 'datetimepicker',
+                'data-target': '#expiration_date'
+            }),
+            'propina': forms.TextInput(attrs={
+                'class': 'form-control',
+                'autocomplete': 'off'
+            }),
+            'nequi_value': forms.TextInput(attrs={
+                'class': 'form-control',
+                'autocomplete': 'off'
+            }),
+            'daviplata_value': forms.TextInput(attrs={
+                'class': 'form-control',
+                'autocomplete': 'off'
             }),
             'autorization_discount': forms.Select(attrs={
                 'class': 'select2',

@@ -148,6 +148,7 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                         detail = SaleDetail()
                         detail.sale_id = sale.id
                         detail.product_id = product.id
+                        detail.cost = product.cost_per_sale_unit()
                         detail.cant = int(i['cant'])
                         detail.price = float(i['pvp'])
                         detail.dscto = float(i['dscto']) / 100

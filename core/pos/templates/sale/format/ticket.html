@@ -124,7 +124,7 @@
         {% for detail in sale.saledetail_set.all %}
             <tr>
                 <td>{{ detail.cant }}</td>
-                <td>{{ detail.product.name }}</td>
+                <td>{{ detail.display_name }}</td>
                 <td class="text-right">$ {{ detail.total|floatformat:0|intcomma }}</td>
             </tr>
         {% endfor %}

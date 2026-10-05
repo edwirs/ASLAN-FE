@@ -1,58 +1,36 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
-from django.views.generic import FormView
-from django.db.models import Sum
-
-from core.pos.models import SaleDetail
-from core.reports.forms import ReportForm
-
-MODULE_NAME = 'R.Productos'
+from core.reports import services
+from core.reports.views.base import ReportView
 
 
-class SaleByProductReportView(LoginRequiredMixin, FormView):
-    template_name = 'sale_by_product_report/report.html'
-    form_class = ReportForm
-
-    def post(self, request, *args, **kwargs):
-        try:
-            action = request.POST.get('action')
-            if action != 'search_report':
-                return JsonResponse({'error': 'Acción no válida'})
-
-            start_date = request.POST.get('start_date')
-            end_date = request.POST.get('end_date')
-
-            queryset = SaleDetail.objects.filter(
-                is_active=True,
-                product__is_active=True
-            ).select_related(
-                'product', 'sale'
-            )
-
-            if start_date and end_date:
-                queryset = queryset.filter(
-                    sale__date_joined__range=[start_date, end_date]
-                )
-
-            data = queryset.values(
-                'product__name'
-            ).annotate(
-                qty=Sum('cant')
-            ).order_by('-qty')
-
-            categories = [item['product__name'] for item in data]
-            quantities = [item['qty'] for item in data]
-
-            return JsonResponse({
-                'categories': categories,
-                'data': quantities
-            })
-
-        except Exception as e:
-            return JsonResponse({'error': str(e)})
-
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['title'] = 'Cantidad vendida por producto'
-        context['module_name'] = MODULE_NAME
-        return context
+class SaleByProductReportView(ReportView):
+    permission_required = 'pos.sale_by_product'
+    module_name = 'R.Productos'
+    title = 'Ventas por producto'
+    table_title = 'Detalle por producto'
+    export_name = 'ventas_por_producto'
+    compute = staticmethod(services.sales_by_product)
+    filters = (
+        {'name': 'date_range', 'label': 'Fechas', 'type': 'daterange', 'default': 'month', 'width': 4},
+        {'name': 'category', 'label': 'Categoría', 'type': 'select', 'options': 'categories', 'width': 2},
+        {'name': 'employee', 'label': 'Vendedor', 'type': 'select', 'options': 'employees', 'width': 2},
+        {'name': 'electronic', 'label': 'Tipo de venta', 'type': 'select', 'width': 2, 'options': [
+            {'value': '', 'label': 'Todas'}, {'value': 'yes', 'label': 'Electrónicas'}, {'value': 'no', 'label': 'No electrónicas'}]},
+        {'name': 'group', 'label': 'Agrupar por', 'type': 'select', 'width': 2, 'options': [
+            {'value': 'product', 'label': 'Producto'}, {'value': 'presentation', 'label': 'Producto y presentación'}]},
+    )
+    columns = (
+        {'key': 'name', 'title': 'Producto', 'type': 'text', 'bold': True, 'sub': 'category', 'tag': 'presentation'},
+        {'key': 'net_qty', 'title': 'Cantidad', 'type': 'number'},
+        {'key': 'net_sales', 'title': 'Ventas netas', 'type': 'money'},
+        {'key': 'share', 'title': '% de ventas', 'type': 'percent', 'bar': True},
+        {'key': 'profit', 'title': 'Utilidad', 'type': 'money', 'cost': True},
+        {'key': 'margin', 'title': 'Margen', 'type': 'percent', 'cost': True},
+        # Se ven al desplegar la fila (y salen en el Excel/PDF)
+        {'key': 'code', 'title': 'Código', 'type': 'text', 'detail': True},
+        {'key': 'breakdown', 'title': 'Vendido por presentación', 'type': 'text', 'detail': True, 'showWhen': ['group', 'product']},
+        {'key': 'sales_count', 'title': 'N° de ventas', 'type': 'number', 'detail': True},
+        {'key': 'avg_price', 'title': 'Precio promedio', 'type': 'money', 'detail': True},
+        {'key': 'ret_qty', 'title': 'Unidades devueltas', 'type': 'number', 'detail': True},
+        {'key': 'cost', 'title': 'Costo', 'type': 'money', 'cost': True, 'detail': True},
+        {'key': 'stock', 'title': 'Stock actual', 'type': 'text', 'detail': True},
+    )

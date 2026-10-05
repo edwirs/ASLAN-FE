@@ -17,7 +17,7 @@ from core.security.mixins import GroupPermissionMixin
 class InventoryManagementView(GroupPermissionMixin,TemplateView):
     template_name = 'inventory_management/management.html'
     success_url = settings.LOGIN_REDIRECT_URL
-    permission_required = 'view_company'
+    permission_required = 'pos.view_inventorygroup'
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)

@@ -15,7 +15,7 @@ MODULE_NAME = 'Productos a descontar'
 
 class ProductAutoAddListView(GroupPermissionMixin, TemplateView):
     template_name = "productautoadd/list.html"
-    permission_required = 'view_product'
+    permission_required = 'pos.view_productautoadd'
     model = ProductAutoAdd
 
     def post(self, request, *args, **kwargs):
@@ -53,7 +53,7 @@ class ProductAutoAddCreateView(GroupPermissionMixin, CreateView):
     template_name = "productautoadd/create.html"
     form_class = ProductAutoAddForm
     success_url = reverse_lazy('productautoadd_list')
-    permission_required = 'add_product'
+    permission_required = 'pos.add_productautoadd'
 
     def post(self, request, *args, **kwargs):
         data = {}
@@ -81,7 +81,7 @@ class ProductAutoAddUpdateView(GroupPermissionMixin, UpdateView):
     template_name = "productautoadd/create.html"
     form_class = ProductAutoAddForm
     success_url = reverse_lazy("productautoadd_list")
-    permission_required = 'change_product'
+    permission_required = 'pos.change_productautoadd'
 
     def dispatch(self, request, *args, **kwargs):
         self.object = self.get_object()
@@ -111,7 +111,7 @@ class ProductAutoAddDeleteView(GroupPermissionMixin, DeleteView):
     model = ProductAutoAdd
     template_name = "delete.html"
     success_url = reverse_lazy("productautoadd_list")
-    permission_required = 'delete_product'
+    permission_required = 'pos.delete_productautoadd'
 
     def post(self, request, *args, **kwargs):
         data = {}

@@ -6,6 +6,7 @@ sidebar-collapse
 
 {% load widget_tweaks %}
 {% load static %}
+{% load l10n %}
 {% block assets_form %}
     <link href="{% static 'css/style.css' %}" rel="stylesheet"></link>
     <link rel="stylesheet" href="{% static 'lib/jquery-ui-1.12.1/jquery-ui.css' %}"/>
@@ -52,26 +53,39 @@ sidebar-collapse
                 {% endfor %}
             </div>
             <div class="products-scroll">
-                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-5 g-3" id="product-list">
+                <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-3" id="product-list">
                     {% for entry in products_grouped %}
                         {% with product=entry.product %}
                             <div class="col">
                                 <div class="card h-100 product_card 
-                                    {% if product.stock == 0 and not product.is_service %}card-no-stock{% else %}card-outline card-success{% endif %}"
+                                    {% if entry.total_stock == 0 and not product.is_service %}card-no-stock{% else %}card-outline card-success{% endif %}"
                                     style="cursor: pointer;"
                                     data-id="{{ product.id }}"
                                     data-code="{{ product.code }}"
                                     data-name="{{ product.name }}"
-                                    data-price="{{ product.pvp }}"
+                                    data-price="{{ product.pvp|unlocalize }}"
                                     data-category="{{ product.category_id }}"
-                                    data-stock="{{ product.stock }}"
+                                    data-stock="{{ entry.total_stock|unlocalize }}"
                                     data-is_service="{{ product.is_service }}"
+                                    data-unit="{{ product.unit_name }}"
                                     >
-                                    <div class="card-body" style="font-size: 13px;">
+                                    <div class="card-body" style="font-size: 14px;">
+                                        <div class="product-thumb" style="position:relative; width:100%; height:90px; overflow:hidden; border-radius:.35rem; background:#f4f6f9; margin-bottom:.5rem;">
+                                            {% if product.image %}
+                                                <img src="{{ product.get_image }}" alt="" loading="lazy"
+                                                     style="position:absolute; top:0; left:0; width:100%; height:100%; max-width:100%; object-fit:cover;"
+                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                <span class="product-thumb-icon" style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; font-size:30px; color:#adb5bd;"><i class="fas {% if product.is_service %}fa-concierge-bell{% else %}fa-box{% endif %}"></i></span>
+                                            {% else %}
+                                                <span class="product-thumb-icon" style="display:flex; position:absolute; inset:0; align-items:center; justify-content:center; font-size:30px; color:#adb5bd;"><i class="fas {% if product.is_service %}fa-concierge-bell{% else %}fa-box{% endif %}"></i></span>
+                                            {% endif %}
+                                        </div>
                                         <h5 class="card-title">{{ product.code }}</h5>
                                         <p class="card-text fw-bold">{{ product.name }}</p>
-                                        {% if product.stock == 0 and not product.is_service %}
+                                        {% if entry.total_stock == 0 and not product.is_service %}
                                             <small class="text-danger fw-bold">Producto sin stock</small>
+                                        {% elif product.id in product_options %}
+                                            <small class="badge bg-info"><i class="fas fa-boxes-stacked"></i> Varias presentaciones</small>
                                         {% endif %}
                                     </div>
                                 </div>
@@ -151,6 +165,44 @@ sidebar-collapse
                 </div>
             </div>
 
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label fw-bold">{{ form.typemethods.label }}:</label>
+                    {{ form.typemethods }}
+                </div>
+                <div class="col">
+                    <label class="form-label fw-bold">{{ form.expiration_date.label }}:</label>
+                    {{ form.expiration_date }}
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label fw-bold">{{ form.cash.label }}:</label>
+                    {{ form.cash }}
+                </div>
+                <div class="col">
+                    <label class="form-label fw-bold">{{ form.propina.label }}:</label>
+                    {{ form.propina }}
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col">
+                    <label class="form-label fw-bold">{{ form.nequi_value.label }}:</label>
+                    {{ form.nequi_value }}
+                </div>
+                <div class="col">
+                    <label class="form-label fw-bold">{{ form.daviplata_value.label }}:</label>
+                    {{ form.daviplata_value }}
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-bold">{{ form.change.label }}:</label>
+                {{ form.change }}
+            </div>
+
             <div class="mb-3 employee w-100" id="employee">
                 <label class="form-label fw-bold">Vendedor:</label>
                 {{ form.employee }}
@@ -203,8 +255,29 @@ sidebar-collapse
 </div>
 {% endblock %}
 
-{% block content_form_before %}    
+{% block content_form_before %}
+    {{ product_options|json_script:"product-options" }}
+    <div class="modal fade" id="modalPresentations" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-0" id="presentation_title"></h5>
+                        <small class="text-muted" id="presentation_stock"></small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-2">Elija la presentación:</p>
+                    <div class="list-group" id="presentation_options"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="{% static 'pos/js/cart.js' %}"></script>
+    <script src="{% static 'pos/js/payment.js' %}"></script>
     <script src="{% static 'bar/admin/js/form.js' %}"></script>
     <script type="application/javascript">
         sale.detail.iva = {{ company.iva|safe }};

@@ -17,7 +17,7 @@ MODULE_NAME = 'Gastos'
 class ExpensesListView(GroupPermissionMixin, FormView):
     template_name = "expenses/list.html"
     form_class = ReportForm
-    permission_required = 'view_bill'
+    permission_required = 'pos.view_expenses'
     model = Expenses
 
     def post(self, request, *args, **kwargs):
