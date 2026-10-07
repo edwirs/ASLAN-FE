@@ -114,6 +114,7 @@ class Product(models.Model):
         item['price'] = float(self.price)
         item['pvp'] = float(self.pvp)
         item['stock'] = float(self.stock) 
+        item['min_stock'] = float(self.min_stock) if self.min_stock is not None else None
         item['image'] = self.get_image()
         return item
 
@@ -570,6 +571,7 @@ class SaleDetail(models.Model):
         item = model_to_dict(self, exclude=['sale'])
         item['product'] = self.product.toJSON()
         item['factor'] = float(self.factor)
+        item['cost'] = float(self.cost) if self.cost is not None else None
         item['display_name'] = self.display_name()
         item['price'] = float(self.price)
         item['price_with_vat'] = float(self.price_with_vat)
