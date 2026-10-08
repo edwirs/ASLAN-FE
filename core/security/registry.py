@@ -181,7 +181,7 @@ class Item:
     view_perm: Optional[str]
     # Permisos que se administran para este módulo en la matriz de roles.
     perms: Tuple[str, ...] = ()
-    icon: str = 'far fa-circle nav-icon'
+    icon: str = 'far fa-circle'
 
 
 @dataclass(frozen=True)
@@ -206,7 +206,7 @@ MENU = (
         Item('productautoadd', 'Productos descuento', 'productautoadd_list', 'pos.view_productautoadd',
              crud_q('pos', 'productautoadd')),
     )),
-    Section('Facturas', 'fas fa-file-text nav-icon', (
+    Section('Facturas', 'fas fa-file-invoice', (
         Item('sales', 'Facturas', 'sale_admin_list', 'pos.view_sale',
              q('pos', 'view_sale', 'add_sale', 'delete_sale', 'delivered_sale', 'discounts_sale', 'view_sale_client')),
         Item('electronic_invoices', 'Facturas Electrónicas', 'sale_Fe_admin_list', 'pos.view_electronic_invoice',
@@ -263,8 +263,8 @@ MENU = (
         Item('report_rotation', 'Rotación e Inactivos', 'rotation_report', 'pos.report_rotation',
              q('pos', 'report_rotation')),
     )),
-    Section('Configuraciones', 'fas fa-wrench nav-icon', (
-        Section('Generales', 'far fa-circle nav-icon', (
+    Section('Configuraciones', 'fas fa-wrench', (
+        Section('Generales', 'fas fa-sliders-h', (
             Item('company', 'Compañia', 'company_update', 'pos.view_company',
                  q('pos', 'view_company', 'change_company')),
             Item('factus_credentials', 'Credenciales Factus', 'factus_credential_list',
@@ -275,7 +275,7 @@ MENU = (
         )),
         Item('tables', 'Mesas', 'table_list', 'pos.view_table', crud_q('pos', 'table')),
     )),
-    Section('Seguridad', 'fas fa-lock nav-icon', (
+    Section('Seguridad', 'fas fa-lock', (
         Item('users', 'Usuarios', 'user_list', 'user.view_user', crud_q('user', 'user')),
         Item('roles', 'Roles y Permisos', 'role_list', 'security.view_role', crud_q('security', 'role')),
         Item('user_access', 'Accesos', 'user_access_list', 'security.view_user_access',
