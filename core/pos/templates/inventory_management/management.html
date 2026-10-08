@@ -75,13 +75,13 @@
                 <tr>
                     <td>{{ g.name }}</td>
                     <td>
-                        <button class="btn btn-warning btn-xs btn-edit-group rounded-pill"
+                        <button class="btn btn-warning btn-xs btn-edit-group"
                                 data-id="{{ g.id }}" data-name="{{ g.name }}">
                                 <i class="fas fa-edit"></i> 
                             Editar
                         </button>
 
-                        <button class="btn btn-danger btn-xs btn-del-group rounded-pill"
+                        <button class="btn btn-danger btn-xs btn-del-group"
                                 data-id="{{ g.id }}">
                                 <i class="fas fa-trash"></i> 
                             Eliminar
@@ -118,7 +118,7 @@
                     <td>{{ ug.user.username }}</td>
                     <td>{{ ug.group.name }}</td>
                     <td>
-                        <button class="btn btn-warning btn-xs btn-edit-ug rounded-pill"
+                        <button class="btn btn-warning btn-xs btn-edit-ug"
                                 data-id="{{ ug.id }}"
                                 data-user="{{ ug.user.id }}"
                                 data-group="{{ ug.group.id }}">
@@ -126,7 +126,7 @@
                             Editar
                         </button>
 
-                        <button class="btn btn-danger btn-xs btn-del-ug rounded-pill"
+                        <button class="btn btn-danger btn-xs btn-del-ug"
                                 data-id="{{ ug.id }}">
                                 <i class="fas fa-trash"></i> 
                             Eliminar
@@ -165,7 +165,7 @@
                 <td>{{ s.group.name }}</td>
                 <td>{{ s.stock }}</td>
                 <td>
-                  <button class="btn btn-danger btn-xs btn-del-stock rounded-pill"
+                  <button class="btn btn-danger btn-xs btn-del-stock"
                           data-id="{{ s.id }}">
                           <i class="fas fa-trash"></i> 
                       Eliminar

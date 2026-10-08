@@ -53,7 +53,7 @@ var user_access = {
                     targets: [-1],
                     class: 'text-center',
                     render: function (data, type, row) {
-                        return '<a href="' + pathname + 'delete/' + row.id + '/" data-bs-toggle="tooltip" title="Eliminar" class="btn btn-danger btn-sm rounded-pill"><i class="fas fa-trash"></i></a>';
+                        return '<a href="' + pathname + 'delete/' + row.id + '/" data-bs-toggle="tooltip" title="Eliminar" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></a>';
                     }
                 },
             ],

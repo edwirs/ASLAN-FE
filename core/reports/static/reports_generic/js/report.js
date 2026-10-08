@@ -7,7 +7,7 @@
 //   tag      -> clave de otro campo que se muestra como etiqueta junto al valor
 //   bar      -> (percent) dibuja una barra de fondo proporcional
 //   small / bold, colors (badge), showWhen: [filtro, valor]
-var reportCfg, dateStart = null, dateEnd = null, tblReport = null, lastColumns = [];
+var reportCfg, dateStart = null, dateEnd = null, tblReport = null, lastColumns = [], lastChart = null;
 
 function esc(t) {
     return $('<div>').text(t === null || t === undefined ? '' : t).html();
@@ -30,7 +30,7 @@ function renderFilters() {
         var wide = f.type === 'daterange' ? ' f-wide' : '';
         if (f.type === 'daterange') {
             field = '<div class="input-group"><span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>' +
-                '<input type="text" class="form-control" id="' + id + '" autocomplete="off" readonly style="background:#fff;cursor:pointer;"></div>';
+                '<input type="text" class="form-control rpt-date" id="' + id + '" autocomplete="off" readonly></div>';
         } else if (f.type === 'select') {
             field = '<select class="form-select" id="' + id + '">' + f.options.map(function (o) {
                 return '<option value="' + esc(o.value) + '">' + esc(o.label) + '</option>';
@@ -149,7 +149,22 @@ function renderKpis(kpis) {
     }).join(''));
 }
 
+// Colores del gráfico según el tema (claro u oscuro)
+function chartTheme() {
+    var dark = window.AslanTheme && window.AslanTheme.isDark();
+    var text = dark ? '#ced4da' : '#333333';
+    return {
+        chart: {backgroundColor: 'transparent'},
+        colors: dark ? ['#6cb2eb', '#f6ad55', '#68d391', '#fc8181', '#b794f4', '#f687b3'] : undefined,
+        title: {style: {color: dark ? '#f8f9fa' : '#333333'}},
+        xAxis: {labels: {style: {color: text}}, lineColor: dark ? '#6c757d' : '#ccd6eb', tickColor: dark ? '#6c757d' : '#ccd6eb'},
+        yAxis: {labels: {style: {color: text}}, gridLineColor: dark ? '#4b545c' : '#e6e6e6'},
+        legend: {itemStyle: {color: text}, itemHoverStyle: {color: dark ? '#fff' : '#000'}}
+    };
+}
+
 function renderChart(chart) {
+    lastChart = chart;
     var $box = $('#report_chart');
     if (!chart || !chart.categories.length) {
         $box.hide().empty();
@@ -158,11 +173,19 @@ function renderChart(chart) {
     $box.show();
     var dual = !!chart.dual;
     var horizontal = chart.series.every(function (s) { return s.type === 'bar'; });
+    var theme = chartTheme();
     Highcharts.chart('report_chart', {
-        chart: {type: horizontal ? 'bar' : 'column', height: horizontal ? Math.max(260, chart.categories.length * 34 + 90) : 340},
-        title: {text: chart.title, style: {fontSize: '15px'}},
-        xAxis: {categories: chart.categories, labels: {style: {fontSize: '11px'}}},
-        yAxis: dual ? [{title: {text: null}, min: 0}, {title: {text: null}, opposite: true, min: 0, max: 100, labels: {format: '{value}%'}}] : {title: {text: null}, min: 0},
+        chart: {type: horizontal ? 'bar' : 'column', backgroundColor: theme.chart.backgroundColor,
+            height: horizontal ? Math.max(260, chart.categories.length * 34 + 90) : 340},
+        title: {text: chart.title, style: {fontSize: '15px', color: theme.title.style.color}},
+        xAxis: {categories: chart.categories, labels: {style: {fontSize: '11px', color: theme.xAxis.labels.style.color}},
+            lineColor: theme.xAxis.lineColor, tickColor: theme.xAxis.tickColor},
+        yAxis: dual ? [
+            {title: {text: null}, min: 0, labels: theme.yAxis.labels, gridLineColor: theme.yAxis.gridLineColor},
+            {title: {text: null}, opposite: true, min: 0, max: 100, labels: {format: '{value}%', style: theme.yAxis.labels.style}}
+        ] : {title: {text: null}, min: 0, labels: theme.yAxis.labels, gridLineColor: theme.yAxis.gridLineColor},
+        legend: theme.legend,
+        colors: theme.colors,
         tooltip: {shared: true},
         credits: {enabled: false},
         series: chart.series.map(function (s) {
@@ -294,6 +317,11 @@ function run() {
         }
     });
 }
+
+// Al cambiar de tema se vuelve a dibujar el gráfico con los colores nuevos
+document.addEventListener('themechange', function () {
+    if (lastChart) renderChart(lastChart);
+});
 
 $(function () {
     reportCfg = JSON.parse($('#report-config').text());

@@ -2,10 +2,23 @@ from crum import get_current_request
 from django import forms
 from django.contrib.auth import update_session_auth_hash
 
+from core.pos.images import USER_MAX_SIDE, ProductImageField, shrink_image
+
 from .models import User
 
 
-class UserForm(forms.ModelForm):
+class UserImageMixin:
+    """Valida la foto del usuario y la reduce (máx. 256 px, WebP): solo se ve pequeña en el menú lateral."""
+
+    def clean_image(self):
+        from django.core.files.uploadedfile import UploadedFile
+        image = self.cleaned_data.get('image')
+        if isinstance(image, UploadedFile):
+            return shrink_image(image, max_side=USER_MAX_SIDE)
+        return image
+
+
+class UserForm(UserImageMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['groups'].required = True
@@ -21,8 +34,10 @@ class UserForm(forms.ModelForm):
             'email': forms.TextInput(attrs={'placeholder': 'Ingrese su correo electrónico'}),
             'password': forms.PasswordInput(render_value=True, attrs={'placeholder': 'Ingrese un password'}),
             'groups': forms.SelectMultiple(attrs={'class': 'select2', 'multiple': 'multiple', 'style': 'width:100%'}),
-            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'})
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'image': forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,image/webp'}),
         }
+        field_classes = {'image': ProductImageField}
         exclude = ['is_change_password', 'is_staff', 'user_permissions', 'date_joined', 'last_login', 'is_superuser', 'email_reset_token']
 
     def update_session(self, user):
@@ -55,7 +70,7 @@ class UserForm(forms.ModelForm):
         return data
 
 
-class ProfileForm(forms.ModelForm):
+class ProfileForm(UserImageMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['names'].widget.attrs['autofocus'] = True
@@ -67,7 +82,9 @@ class ProfileForm(forms.ModelForm):
             'names': forms.TextInput(attrs={'placeholder': 'Ingrese sus nombres'}),
             'username': forms.TextInput(attrs={'placeholder': 'Ingrese un username'}),
             'email': forms.TextInput(attrs={'placeholder': 'Ingrese su correo electrónico'}),
+            'image': forms.ClearableFileInput(attrs={'accept': 'image/jpeg,image/png,image/webp'}),
         }
+        field_classes = {'image': ProductImageField}
         exclude = ['is_change_password', 'is_active', 'is_staff', 'user_permissions', 'password', 'date_joined', 'last_login', 'is_superuser', 'groups', 'email_reset_token']
 
     def save(self, commit=True):

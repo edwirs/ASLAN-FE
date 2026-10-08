@@ -44,11 +44,11 @@ var transaction = {
 
                         var buttons = '';
 
-                        buttons += '<a href="'+ pathname +'/update/'+ row.id +'/" class="btn btn-warning btn-sm rounded-pill" title="Editar"><i class="fas fa-edit"></i></a> ';
+                        buttons += '<a href="'+ pathname +'/update/'+ row.id +'/" class="btn btn-warning btn-sm" title="Editar"><i class="fas fa-edit"></i></a> ';
 
-                        buttons += '<a href="'+ pathname +'/delete/'+ row.id +'/" class="btn btn-danger btn-sm rounded-pill" title="Eliminar"><i class="fas fa-trash"></i></a> ';
+                        buttons += '<a href="'+ pathname +'/delete/'+ row.id +'/" class="btn btn-danger btn-sm" title="Eliminar"><i class="fas fa-trash"></i></a> ';
 
-                        buttons += '<button data-id="'+row.id+'" class="btn btn-secondary btn-sm rounded-pill btn-print"><i class="fas fa-print"></i></button>';
+                        buttons += '<button data-id="'+row.id+'" class="btn btn-secondary btn-sm btn-print"><i class="fas fa-print"></i></button>';
 
                         return buttons;
                     }

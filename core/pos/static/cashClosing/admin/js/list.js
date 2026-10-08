@@ -103,18 +103,17 @@ var cashCloshing = {
                                 <a rel="print" href="#"
                                 data-url="${row.print_url}"
                                 data-bs-toggle="tooltip" title="Imprimir tirilla"
-                                class="btn btn-link text-primary p-1">
-
-                                    <i class="fas fa-print fa-lg"></i>
-                                </a>
+                                class="btn btn-secondary btn-sm">
+                                    <i class="fas fa-print"></i>
+                                </a> 
                             `;
                         }
 
                         buttons += `
                             <a href="/pos/cashClosing/detail/${row.id}/"
-                            class="btn btn-link text-primary p-1">
-
-                                <i class="fas fa-eye fa-lg"></i>
+                            data-bs-toggle="tooltip" title="Detalle"
+                            class="btn btn-success btn-sm">
+                                <i class="fas fa-eye"></i>
                             </a>
                         `;
 

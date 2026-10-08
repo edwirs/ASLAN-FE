@@ -14,7 +14,8 @@ from django.core.files.base import ContentFile
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024      # lo máximo que se acepta subir
-MAX_SIDE = 400                          # lado máximo (px) del archivo guardado
+MAX_SIDE = 400                          # lado máximo (px) de las imágenes de producto
+USER_MAX_SIDE = 256                     # lado máximo (px) de las fotos de usuario (se ven a ~34 px en el menú)
 MAX_SOURCE_PIXELS = 25_000_000          # evita imágenes gigantes que agotan la memoria
 ALLOWED_FORMATS = {'JPEG', 'PNG', 'WEBP'}
 WEBP_QUALITY = 80
@@ -26,8 +27,8 @@ def _safe_stem(name):
     return stem or 'producto'
 
 
-def shrink_image(file_obj, name=None):
-    """Valida la imagen y devuelve un ``ContentFile`` WebP de máximo MAX_SIDE px por lado.
+def shrink_image(file_obj, name=None, max_side=MAX_SIDE):
+    """Valida la imagen y devuelve un ``ContentFile`` WebP de máximo ``max_side`` px por lado.
 
     Lanza ``ValidationError`` con un mensaje claro si no es una imagen válida o es muy pesada.
     """
@@ -52,7 +53,7 @@ def shrink_image(file_obj, name=None):
     image = ImageOps.exif_transpose(image)
     has_alpha = image.mode in ('RGBA', 'LA') or (image.mode == 'P' and 'transparency' in image.info)
     image = image.convert('RGBA' if has_alpha else 'RGB')
-    image.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
+    image.thumbnail((max_side, max_side), Image.LANCZOS)
 
     buffer = BytesIO()
     image.save(buffer, format='WEBP', quality=WEBP_QUALITY, method=4)
