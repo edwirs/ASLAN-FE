@@ -10,15 +10,26 @@ $(function () {
         theme: 'bootstrap4'
     });
 
-    $('input[name="stock"]')
+    // El stock admite hasta 3 decimales solo si el producto permite cantidades decimales
+    var $allowDecimals = $('input[name="allow_decimals"]');
+    var $stock = $('input[name="stock"]');
+    $stock
         .TouchSpin({
             min: 0,
             max: 100000000,
             step: 1,
+            decimals: 0,
+            forcestepdivisibility: 'none',
         })
         .on('keypress', function (e) {
-            return validate_text_box({'event': e, 'type': 'numbers'});
+            return validate_text_box({'event': e, 'type': $allowDecimals.is(':checked') ? 'decimals' : 'numbers'});
         });
+    function applyStockMode() {
+        var decimals = $allowDecimals.is(':checked');
+        $stock.trigger('touchspin.updatesettings', {decimals: decimals ? 3 : 0, step: 1});
+    }
+    $allowDecimals.on('change', applyStockMode);
+    applyStockMode();
 
     $('input[name="price"]')
         .TouchSpin({
@@ -79,6 +90,65 @@ $(function () {
         });
 });
 
+// ---- Unidad de medida (selector con opción "Otra…") --------------------------
+function getUnitName() {
+    var value = $('select[name="unit_name"]').val();
+    if (value === '__other__') {
+        return $.trim($('#unit_name_other').val()) || 'Unidad';
+    }
+    return value || 'Unidad';
+}
+
+$(function () {
+    var $select = $('select[name="unit_name"]');
+    var $other = $('#unit_name_other');
+    function toggleOther() {
+        var other = $select.val() === '__other__';
+        $other.toggle(other);
+        if (other) $other.trigger('focus');
+    }
+    $select.on('change', toggleOther);
+    toggleOther();
+
+    // Al elegir una unidad que se vende en fracciones (Kilo, Libra, Litro...), se activa solo
+    // "¿Permite cantidades decimales?". Si el usuario lo cambia a mano, se respeta su decisión.
+    var decimalUnits = [];
+    try { decimalUnits = JSON.parse($select.attr('data-decimal-units') || '[]'); } catch (e) { decimalUnits = []; }
+    var $allow = $('input[name="allow_decimals"]');
+    var $hint = $('#decimals_hint');
+    var autoChecked = false;
+
+    function showHint(text) {
+        if (text) {
+            $hint.text(text).each(function () { this.style.setProperty('display', 'block', 'important'); });
+        } else {
+            $hint.each(function () { this.style.setProperty('display', 'none', 'important'); });
+        }
+    }
+
+    $allow.on('change', function (e) {
+        if (!e.isTrigger) {
+            autoChecked = false;
+            showHint('');
+        }
+    });
+
+    $select.on('change', function () {
+        var unit = $select.val();
+        if (decimalUnits.indexOf(unit) !== -1) {
+            if (!$allow.is(':checked')) {
+                $allow.prop('checked', true).trigger('change');
+                autoChecked = true;
+                showHint('Se activó porque «' + unit + '» se vende en fracciones. Puede desactivarlo si no lo necesita.');
+            }
+        } else if (autoChecked && $allow.is(':checked')) {
+            $allow.prop('checked', false).trigger('change');
+            autoChecked = false;
+            showHint('');
+        }
+    });
+});
+
 // ---- Presentaciones -------------------------------------------------------
 var presentations = {
     $body: null,
@@ -107,7 +177,7 @@ var presentations = {
             $(this).closest('tr').remove();
             self.refresh();
         });
-        $('input[name="unit_name"], input[name="pvp"]').on('input change', function () {
+        $('select[name="unit_name"], #unit_name_other, input[name="pvp"]').on('input change', function () {
             self.refresh();
         });
 
@@ -135,7 +205,7 @@ var presentations = {
         $('.help-conv').toggle(!variants);
         $('.help-var').toggle(variants);
         $('.mode-option').removeClass('active').find('input:checked').closest('.mode-option').addClass('active');
-        var unit = $.trim($('input[name="unit_name"]').val()) || 'Unidad';
+        var unit = getUnitName();
         // En variantes el stock de arriba es el de la unidad base, que es una variante más
         $('#stock label.stock').contents().first().replaceWith(on && variants ? 'Stock de ' + unit + ' ' : 'Stock ');
         $('#stock .base-hint').toggle(!(on && variants));
@@ -153,7 +223,7 @@ var presentations = {
             '<tr data-id="' + esc(r.id || '') + '">' +
             '<td><input type="text" class="form-control form-control-sm p-name" maxlength="50" placeholder="' + this.namePlaceholder() + '" value="' + esc(r.name) + '"></td>' +
             '<td class="mode-conv"><input type="number" class="form-control form-control-sm p-factor" min="0.001" step="0.001" placeholder="12" value="' + esc(r.factor) + '"></td>' +
-            '<td class="mode-var"><input type="number" class="form-control form-control-sm p-stock" min="0" step="1" placeholder="0" value="' + esc(r.stock) + '"></td>' +
+            '<td class="mode-var"><input type="number" class="form-control form-control-sm p-stock" min="0" step="any" placeholder="0" value="' + esc(r.stock) + '"></td>' +
             '<td><input type="number" class="form-control form-control-sm p-price" min="0" step="0.01" value="' + esc(r.price) + '"></td>' +
             '<td><input type="number" class="form-control form-control-sm p-pvp" min="0.01" step="0.01" value="' + esc(r.pvp) + '"></td>' +
             '<td><input type="text" class="form-control form-control-sm p-barcode" maxlength="50" value="' + esc(r.barcode) + '"></td>' +
@@ -185,7 +255,7 @@ var presentations = {
     },
 
     refresh: function () {
-        var unit = $.trim($('input[name="unit_name"]').val()) || 'Unidad';
+        var unit = getUnitName();
         $('.unit-label').text(unit);
         var base = parseFloat($('input[name="pvp"]').val()) || 0;
         this.$body.find('tr').each(function () {

@@ -1,0 +1,221 @@
+{% load static %}
+{% load humanize %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Cierre de caja N° {{ closing.id }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="{% static 'lib/bootstrap-5.0.2/css/bootstrap.min.css' %}" rel="stylesheet">
+    <style>
+        @page {
+            size: 80mm auto;
+            margin: 0;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            padding: 0;
+            margin: 0;
+            font-size: 10px;
+            color: black !important;
+            min-height: 100%;
+        }
+
+        .content {
+            width: 100%;
+            padding: 10px;
+        }
+
+        .head-name {
+            margin-top: 0;
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 0;
+            text-align: center;
+        }
+
+        .head-voucher-number {
+            font-size: 12px;
+            text-align: center;
+            margin: 2px 0;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .head-details {
+            margin-top: 0;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .head-data {
+            text-align: left;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .section-title {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 10px;
+            margin: 4px 0 2px 0;
+            text-align: center;
+        }
+
+        .table {
+            color: black;
+            margin-bottom: 0;
+        }
+
+        .table td, .table th {
+            padding: 1px 0;
+            color: black;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .table td.amount, .table th.amount {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .row-total td {
+            border-top: 1px solid black;
+            font-weight: bold;
+        }
+
+        .row-strong td {
+            font-weight: bold;
+            font-size: 11px;
+        }
+
+        .img-logo {
+            display: block;
+            margin: 0 auto 2px auto;
+            width: 60px;
+            height: auto;
+            object-fit: contain;
+        }
+
+        .dotted-separator {
+            border: none !important;
+            border-top: 1px dotted black !important;
+            margin: 5px 0;
+            color: black;
+            background-color: transparent !important;
+        }
+
+        .signature {
+            margin-top: 28px;
+            border-top: 1px solid black;
+            text-align: center;
+            text-transform: uppercase;
+            padding-top: 2px;
+        }
+
+        .obs {
+            text-transform: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+<div class="content">
+    {% if company %}
+        <img alt="" src="{{ company.get_image }}" class="img-fluid d-block mx-auto img-logo">
+        <h1 class="head-name">{{ company.name|upper }}</h1>
+        <p class="text-center head-details">
+            Dirección: {{ company.address }}<br>
+            RUT: {{ company.ruc }}<br>
+            Teléfono: {{ company.phone }} / Celular: {{ company.mobile }}
+        </p>
+    {% endif %}
+
+    <p class="head-voucher-number">CIERRE DE CAJA N° {{ closing.id }}</p>
+
+    <hr class="dotted-separator">
+
+    <p class="head-data">
+        <b>Fecha del cierre:</b> {{ closing.created_at|date:'d/m/Y h:i A' }}<br>
+        <b>Responsable:</b> {{ closing.user.names|default:closing.user.username }}<br>
+        <b>Período:</b>
+        {% if period_start %}{{ period_start|date:'d/m/Y h:i A' }}{% else %}Desde el inicio{% endif %}
+        &rarr; {{ closing.created_at|date:'d/m/Y h:i A' }}<br>
+        <b>Ventas incluidas:</b> {{ sales_count }}
+    </p>
+
+    <hr class="dotted-separator">
+
+    <div class="section-title">Ventas por medio de pago</div>
+    <table class="table table-borderless table-sm">
+        <tbody>
+        <tr><td>Efectivo</td><td class="amount">$ {{ closing.cash_sales|floatformat:0|intcomma }}</td></tr>
+        <tr><td>Tarjeta crédito</td><td class="amount">$ {{ closing.credit_sales|floatformat:0|intcomma }}</td></tr>
+        <tr><td>Tarjeta débito</td><td class="amount">$ {{ closing.debit_sales|floatformat:0|intcomma }}</td></tr>
+        <tr><td>Transferencias</td><td class="amount">$ {{ closing.transfer_sales|floatformat:0|intcomma }}</td></tr>
+        <tr class="row-total"><td>Total ventas</td><td class="amount">$ {{ closing.total_sales|floatformat:0|intcomma }}</td></tr>
+        </tbody>
+    </table>
+
+    <hr class="dotted-separator">
+
+    <div class="section-title">Efectivo en caja</div>
+    <table class="table table-borderless table-sm">
+        <tbody>
+        <tr><td>Base inicial</td><td class="amount">$ {{ closing.base_cash|floatformat:0|intcomma }}</td></tr>
+        <tr><td>(+) Ventas en efectivo</td><td class="amount">$ {{ closing.cash_sales|floatformat:0|intcomma }}</td></tr>
+        <tr><td>(-) Gastos de caja</td><td class="amount">$ {{ closing.expenses|floatformat:0|intcomma }}</td></tr>
+        <tr class="row-total"><td>Efectivo esperado</td><td class="amount">$ {{ closing.expected_cash|floatformat:0|intcomma }}</td></tr>
+        <tr class="row-strong"><td>Efectivo contado</td><td class="amount">$ {{ closing.real_cash|floatformat:0|intcomma }}</td></tr>
+        <tr class="row-strong">
+            <td>
+                {% if closing.difference > 0 %}Sobrante{% elif closing.difference < 0 %}Faltante{% else %}Diferencia{% endif %}
+            </td>
+            <td class="amount">$ {{ difference_abs|floatformat:0|intcomma }}</td>
+        </tr>
+        </tbody>
+    </table>
+
+    {% if expense_list %}
+        <hr class="dotted-separator">
+        <div class="section-title">Detalle de gastos de caja</div>
+        <table class="table table-borderless table-sm">
+            <tbody>
+            {% for e in expense_list %}
+                <tr><td>{{ e.reason }}</td><td class="amount">$ {{ e.amount|floatformat:0|intcomma }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% if tips %}
+        <hr class="dotted-separator">
+        <table class="table table-borderless table-sm">
+            <tbody>
+            <tr><td>Propinas del período (no incluidas arriba)</td><td class="amount">$ {{ tips|floatformat:0|intcomma }}</td></tr>
+            </tbody>
+        </table>
+    {% endif %}
+
+    {% if closing.observations %}
+        <hr class="dotted-separator">
+        <div class="section-title">Observaciones</div>
+        <div class="obs">{{ closing.observations }}</div>
+    {% endif %}
+
+    <hr class="dotted-separator">
+
+    <div class="signature">Firma del responsable</div>
+    <div class="signature">Firma del supervisor</div>
+
+    <p class="text-center head-details" style="margin-top: 10px;">
+        Impreso: {{ printed_at|date:'d/m/Y h:i A' }}<br>
+        Elaborado por: ASLAN Tecnologia<br>
+        Tel: 3002308365
+    </p>
+</div>
+</body>
+</html>

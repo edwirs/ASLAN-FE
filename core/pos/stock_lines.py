@@ -5,9 +5,36 @@ Compartido por la venta rápida (barra) y los pedidos de mesa.
 El stock se descuenta del "holder" de cada línea: el producto (conversión de unidades, donde todas sus
 presentaciones comparten stock) o la propia presentación (modo variantes, stock por tamaño).
 """
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from core.pos.models import Product, ProductAutoAdd, ProductPresentation
+
+
+QTY_STEP = Decimal('0.001')
+
+
+def parse_quantity(raw, product):
+    """Cantidad vendida como Decimal de hasta 3 decimales.
+
+    Solo los productos marcados "¿Permite cantidades decimales?" admiten fracciones (0,295 kg);
+    los demás se venden en unidades enteras. Lanza ``Exception`` con un mensaje claro si no es válida.
+    """
+    try:
+        qty = Decimal(str(raw).replace(',', '.').strip())
+    except (InvalidOperation, ValueError):
+        raise Exception(f"Cantidad inválida para '{product.name}'.")
+    rounded = qty.quantize(QTY_STEP)
+    # tolera el ruido de coma flotante del navegador (0.30000000000000004), pero no más de 3 decimales reales
+    if abs(qty - rounded) > Decimal('0.0000001'):
+        raise Exception(f"La cantidad de '{product.name}' admite máximo 3 decimales.")
+    if rounded <= 0:
+        raise Exception(f"La cantidad de '{product.name}' debe ser mayor a cero.")
+    if rounded != rounded.to_integral_value() and not product.allow_decimals:
+        raise Exception(f"'{product.name}' no permite cantidades decimales. Actívelo en el producto "
+                        f"(\"¿Permite cantidades decimales?\") o venda unidades enteras.")
+    if rounded >= Decimal('1000000'):
+        raise Exception(f"La cantidad de '{product.name}' es demasiado grande.")
+    return rounded
 
 
 def resolve_lines(raw_lines, snapshot=False):
@@ -27,9 +54,7 @@ def resolve_lines(raw_lines, snapshot=False):
         if pid not in products:
             products[pid] = Product.objects.select_for_update().get(pk=pid)
         product = products[pid]
-        qty = int(raw['cant'])
-        if qty < 1:
-            raise Exception(f"Cantidad inválida para '{product.name}'.")
+        qty = parse_quantity(raw['cant'], product)
 
         presentation, factor, price = None, Decimal(1), product.pvp
         if snapshot:
@@ -67,7 +92,7 @@ def resolve_lines(raw_lines, snapshot=False):
         else:
             name = presentation.name if presentation else (product.unit_name if own else '')
 
-        base_units = factor * qty
+        base_units = (factor * qty).quantize(QTY_STEP)
         needed[key] = needed.get(key, Decimal(0)) + base_units
         lines.append({'product': product, 'presentation': presentation, 'presentation_name': name, 'holder': holder,
                       'key': key, 'label': label, 'own_stock': own, 'cant': qty, 'factor': factor,

@@ -145,7 +145,8 @@ class OrderBarraView(LoginRequiredMixin, TemplateView):
                 details.append({
                     'id': product.id,
                     'name': product.name,
-                    'cant': d.cant,
+                    'cant': float(d.cant),
+                    'allow_decimals': product.allow_decimals,
                     'pvp': float(d.price),
                     'total': float(d.cant * d.price),
                     'presentation_id': d.presentation_id,

@@ -40,7 +40,7 @@ var product = {
                     class: 'text-center',
                     render: function (data, type, row) {
                         var esc = function (t) { return $('<div>').text(t).html(); };
-                        var num = function (n) { return parseFloat(n).toLocaleString('es-CO', {maximumFractionDigits: 2}); };
+                        var num = function (n) { return parseFloat(n).toLocaleString('es-CO', {maximumFractionDigits: 3}); };
                         if (data.mode === 'service') {
                             return '<span class="text-muted">Sin inventario</span>';
                         }

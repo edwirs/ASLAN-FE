@@ -21,7 +21,22 @@ var PosCart = (function () {
     }
 
     function formatNumber(value) {
-        return parseFloat(value.toFixed(3)).toLocaleString('es-CO');
+        return parseFloat(value.toFixed(3)).toLocaleString('es-CO', {maximumFractionDigits: 3});
+    }
+
+    // Cantidades con hasta 3 decimales (solo productos que permiten decimales); las demás, enteras
+    function round3(value) {
+        return Math.round(value * 1000) / 1000;
+    }
+
+    function isDecimalRow(tr) {
+        return tr.data('dec') === true || tr.data('dec') === 'true';
+    }
+
+    function readQty(tr) {
+        var qty = round3(parseFloat(String(tr.find('.input-qty').val()).replace(',', '.')));
+        if (isNaN(qty)) return 0;
+        return isDecimalRow(tr) ? qty : Math.floor(qty);
     }
 
     // Unidades base que ya hay en el carrito de ese producto (otras filas distintas a exceptKey).
@@ -30,17 +45,18 @@ var PosCart = (function () {
         $('#tblProductsBarra tbody tr').each(function () {
             var tr = $(this);
             if (tr.data('id') == productId && tr.data('key') !== exceptKey && !tr.data('own')) {
-                units += (parseInt(tr.find('.input-qty').val()) || 0) * parseFloat(tr.data('factor'));
+                units += readQty(tr) * parseFloat(tr.data('factor'));
             }
         });
         return units;
     }
 
     // Cuántas unidades de esta presentación caben todavía.
-    function availableQty(productId, factor, stock, isService, exceptKey, own) {
+    function availableQty(productId, factor, stock, isService, exceptKey, own, decimals) {
         if (isService) return Infinity;
-        if (own) return Math.floor(stock + 1e-9);
-        return Math.floor((stock - cartUnitsFor(productId, exceptKey) + 1e-9) / factor);
+        var raw = own ? stock : (stock - cartUnitsFor(productId, exceptKey)) / factor;
+        // con decimales se puede vender hasta la última fracción; sin ellos, solo unidades completas
+        return decimals ? Math.floor(raw * 1000 + 1e-6) / 1000 : Math.floor(raw + 1e-9);
     }
 
     function stockAlert(stock, unit) {
@@ -52,16 +68,18 @@ var PosCart = (function () {
     }
 
     function updateRow(tr) {
-        var qty = parseInt(tr.find('.input-qty').val());
-        if (isNaN(qty) || qty < 1) {
-            qty = 1;
+        var dec = isDecimalRow(tr);
+        var minQty = dec ? 0.001 : 1;
+        var qty = readQty(tr);
+        if (!qty || qty < minQty) {
+            qty = dec ? (qty > 0 ? minQty : 1) : 1;
         }
         var own = tr.data('own') === true || tr.data('own') === 'true';
         var stock = parseFloat(tr.data('stock'));
         var max = availableQty(tr.data('id'), parseFloat(tr.data('factor')), stock,
-            tr.data('service') === true || tr.data('service') === 'true', tr.data('key'), own);
+            tr.data('service') === true || tr.data('service') === 'true', tr.data('key'), own, dec);
         if (qty > max) {
-            qty = Math.max(max, 1);
+            qty = Math.max(max, minQty);
             stockAlert(own ? stock : stock - cartUnitsFor(tr.data('id'), tr.data('key')), tr.data('unit'));
         }
         tr.find('.input-qty').val(qty);
@@ -73,7 +91,7 @@ var PosCart = (function () {
         var total = 0;
         $('#tblProductsBarra tbody tr').each(function () {
             var tr = $(this);
-            total += (parseInt(tr.find('.input-qty').val()) || 0) * parseFloat(tr.data('price'));
+            total += readQty(tr) * parseFloat(tr.data('price'));
         });
         payable = totalFilter ? totalFilter(total) : total;
         $('#id_total').val(formatPrice(payable));
@@ -89,13 +107,16 @@ var PosCart = (function () {
         if (item.has_options) {
             label += ' <span class="badge bg-info ms-1">' + escapeHtml(opt.name) + '</span>';
         }
+        var dec = !!item.allow_decimals;
         var row = $(
             '<tr data-id="' + item.id + '" data-key="' + key + '" data-pres="' + (opt.presentation_id || '') + '"' +
+            ' data-dec="' + (dec ? 'true' : 'false') + '"' +
             ' data-factor="' + opt.factor + '" data-price="' + opt.pvp + '" data-stock="' + rowStock + '"' +
             ' data-own="' + (own ? 'true' : 'false') + '"' +
             ' data-service="' + (item.is_service ? 'true' : 'false') + '" data-unit="' + escapeHtml(own ? opt.name : item.unit) + '">' +
             '<td>' + label + '</td>' +
-            '<td style="width:80px;"><input type="number" class="form-control form-control-sm input-qty" value="' + qty + '" min="1"></td>' +
+            '<td style="width:' + (dec ? '110' : '80') + 'px;"><input type="number" class="form-control form-control-sm input-qty" value="' + qty + '" ' +
+            (dec ? 'min="0.001" step="0.001" inputmode="decimal"' : 'min="1" step="1"') + '></td>' +
             '<td><span class="price-display">' + formatPrice(qty * opt.pvp) + '</span>' +
             '<button type="button" class="btn btn-sm btn-danger ms-2 btn-delete" title="Eliminar"><i class="fas fa-trash-alt"></i></button></td>' +
             '</tr>'
@@ -122,11 +143,12 @@ var PosCart = (function () {
         });
         if (existing.length > 0) {
             var qtyInput = existing.find('.input-qty');
-            qtyInput.val((parseInt(qtyInput.val()) || 0) + 1);
+            qtyInput.val(round3((readQty(existing) || 0) + 1));
             updateRow(existing);
             return;
         }
-        if (availableQty(item.id, opt.factor, rowStock, item.is_service, key, own) < 1) {
+        var minNeeded = item.allow_decimals ? 0.001 : 1;
+        if (availableQty(item.id, opt.factor, rowStock, item.is_service, key, own, !!item.allow_decimals) < minNeeded) {
             stockAlert(own ? rowStock : Math.max(item.stock - cartUnitsFor(item.id, key), 0), item.unit);
             return;
         }
@@ -143,19 +165,20 @@ var PosCart = (function () {
         options.forEach(function (opt) {
             var key = item.id + '-' + (opt.presentation_id || 0);
             var own = !!opt.own_stock;
-            var avail = availableQty(item.id, opt.factor, own ? opt.stock : item.stock, item.is_service, key, own);
+            var avail = availableQty(item.id, opt.factor, own ? opt.stock : item.stock, item.is_service, key, own, !!item.allow_decimals);
             var detail;
             if (own) {
-                detail = 'Quedan ' + Math.max(avail, 0);
+                detail = 'Quedan ' + formatNumber(Math.max(avail, 0));
             } else {
                 detail = (opt.factor === 1 ? '1 ' + escapeHtml(item.unit) : 'Contiene ' + formatNumber(opt.factor) + ' ' + escapeHtml(item.unit)) +
-                    (avail === Infinity ? '' : ' &middot; disponibles: ' + Math.max(avail, 0));
+                    (avail === Infinity ? '' : ' &middot; disponibles: ' + formatNumber(Math.max(avail, 0)));
             }
             var btn = $('<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"></button>');
-            btn.prop('disabled', avail < 1);
+            var minNeeded = item.allow_decimals ? 0.001 : 1;
+            btn.prop('disabled', avail < minNeeded);
             btn.html(
                 '<div><div class="fw-bold">' + escapeHtml(opt.name) + '</div>' +
-                '<small class="' + (avail < 1 ? 'text-danger' : 'text-muted') + '">' + (avail < 1 ? 'Agotado' : detail) + '</small></div>' +
+                '<small class="' + (avail < minNeeded ? 'text-danger' : 'text-muted') + '">' + (avail < minNeeded ? 'Agotado' : detail) + '</small></div>' +
                 '<span class="badge bg-success rounded-pill fs-6">' + formatPrice(opt.pvp) + '</span>'
             );
             btn.on('click', function () {
@@ -181,6 +204,7 @@ var PosCart = (function () {
                 stock: parseFloat(card.data('stock')) || 0,
                 is_service: card.data('is_service') === true || card.data('is_service') === 'True' || card.data('is_service') === 'true',
                 unit: card.data('unit') || 'Unidad',
+                allow_decimals: card.data('decimals') === true || card.data('decimals') === 'true',
                 has_options: !!(options && options.length > 1)
             },
             options: options,
@@ -217,6 +241,7 @@ var PosCart = (function () {
                 stock: parseFloat(product.stock) || 0,
                 is_service: !!product.is_service,
                 unit: product.unit_name || 'Unidad',
+                allow_decimals: !!product.allow_decimals,
                 has_options: !!(options && options.length > 1)
             };
             var base = options && options.length ? options[0] : {
@@ -239,7 +264,7 @@ var PosCart = (function () {
                     pvp: d.pvp, own_stock: d.own_stock, stock: d.stock
                 };
                 appendRow({id: d.id, name: d.name, stock: d.stock, is_service: d.is_service, unit: d.unit,
-                    has_options: d.has_options}, opt, d.cant);
+                    allow_decimals: !!d.allow_decimals, has_options: d.has_options}, opt, d.cant);
             });
             updateTotal();
         },
@@ -261,7 +286,7 @@ var PosCart = (function () {
                 lines.push({
                     id: row.data('id'),
                     presentation_id: row.data('pres') || null,
-                    cant: parseInt(row.find('.input-qty').val()),
+                    cant: readQty(row),
                     dscto: 0.00
                 });
             });

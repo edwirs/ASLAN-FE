@@ -50,7 +50,9 @@
         <div class="col-md-6 col-lg-4 mb-3">
             <label class="form-label fw-bold">{{ form.unit_name.label }}</label>
             {{ form.unit_name }}
-            <small class="text-muted">El precio y el stock de arriba son de esta unidad.</small>
+            <input type="text" name="unit_name_other" id="unit_name_other" class="form-control mt-2" maxlength="30"
+                   placeholder="Escriba la unidad (Ej: Racimo)" style="display: none;" autocomplete="off">
+            <small class="text-muted">El precio y el stock de arriba son de esta unidad. Si no está en la lista, elija «Otra…».</small>
         </div>
         <div class="col-md-6 col-lg-4 mb-3" id="min_stock">
             <label class="form-label fw-bold">{{ form.min_stock.label }} <small class="text-muted fw-normal">(opcional)</small></label>
@@ -149,6 +151,16 @@
             </label>
             <div class="form-check form-switch mb-0">
                 {{ form.is_service }}
+            </div>
+        </div>
+        <div class="col-md-4 d-flex justify-content-between align-items-center" id="allow_decimals_row">
+            <label class="form-check-label fw-bold me-2 mb-0" for="{{ form.allow_decimals.id_for_label }}">
+                {{ form.allow_decimals.label }}
+                <small class="text-muted fw-normal d-block">Para productos que se venden por peso o fracciones (kilos, litros): admite cantidades como 0,295</small>
+                <small class="text-info fw-normal d-block" id="decimals_hint" style="display: none !important;"></small>
+            </label>
+            <div class="form-check form-switch mb-0">
+                {{ form.allow_decimals }}
             </div>
         </div>
         <div class="col-md-4 d-flex justify-content-between align-items-center">

@@ -169,7 +169,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 if best_seller:
                     data = {
                         'product': best_seller['product__name'],
-                        'quantity': int(best_seller['quantity'])
+                        'quantity': float(best_seller['quantity']) if best_seller['quantity'] % 1 else int(best_seller['quantity'])
                     }
                 else:
                     data = {'product': None, 'quantity': 0}

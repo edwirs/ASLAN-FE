@@ -98,14 +98,17 @@ var cashCloshing = {
 
                         let buttons = '';
 
-                        buttons += `
-                            <a href="/cashClosing/pdf/${row.id}/"
-                            target="_blank"
-                            class="btn btn-link text-primary p-1">
+                        if (row.print_url) {
+                            buttons += `
+                                <a rel="print" href="#"
+                                data-url="${row.print_url}"
+                                data-bs-toggle="tooltip" title="Imprimir tirilla"
+                                class="btn btn-link text-primary p-1">
 
-                                <i class="far fa-file-pdf fa-lg"></i>
-                            </a>
-                        `;
+                                    <i class="fas fa-print fa-lg"></i>
+                                </a>
+                            `;
+                        }
 
                         buttons += `
                             <a href="/pos/cashClosing/detail/${row.id}/"
@@ -139,23 +142,12 @@ $(function () {
             e.preventDefault();
             $('.tooltip').remove();
 
-            let id = $(this).data('id');
-            let printUrl = pathname + 'print/invoice/' + id + '/';
-
             var iframe = document.getElementById('print_frame');
-            iframe.src = printUrl;
-
             iframe.onload = function () {
                 iframe.contentWindow.focus();
                 iframe.contentWindow.print();
-
-                // Cuando el usuario termina (imprimir o cancelar), regresar al listado
-                var afterPrint = function () {
-                    location.href = pathname;  // vuelve a la lista
-                    window.removeEventListener("afterprint", afterPrint);
-                };
-                window.addEventListener("afterprint", afterPrint);
             };
+            iframe.src = $(this).data('url');
         });
 
 

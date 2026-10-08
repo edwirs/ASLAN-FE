@@ -126,7 +126,7 @@ def sales_by_product(params, can_costs):
     for d in lines:
         label = d['presentation_name'] or ''
         r = row_for(d['product_id'], d['product__name'], d['product__code'], d['product__category__name'], label)
-        cant, factor = d['cant'], _f(d['factor'])
+        cant, factor = _f(d['cant']), _f(d['factor'])
         r['qty'] += cant
         r['units'] += cant * factor
         r['revenue'] += _f(d['total'])
@@ -241,7 +241,7 @@ def inventory_value(params, can_costs):
                 continue
             item = {
                 'code': product.code, 'name': product.name, 'category': product.category.name, 'variant': h['label'],
-                'stock': _round(h['stock'], 2), 'min': h['min'] if h['min'] is not None else '', 'state': state,
+                'stock': _round(h['stock'], 3), 'min': h['min'] if h['min'] is not None else '', 'state': state,
                 'pvp': _round(h['pvp']), 'equivalences': eq if h['key'][0] == 'b' else '',
             }
             if can_costs:
@@ -297,7 +297,7 @@ def restock(params, can_costs):
     demand = defaultdict(float)
     for d in _sale_lines(since, today, category=params.get('category')).values(
             'product_id', 'presentation_id', 'own_stock', 'cant', 'factor'):
-        demand[_holder_key(d)] += d['cant'] * _f(d['factor'])
+        demand[_holder_key(d)] += _f(d['cant']) * _f(d['factor'])
 
     last_buy = {}
     for b in BuyDetail.objects.select_related('buy_id__provider').order_by('-buy_id__date_joined', '-id').values(
@@ -335,7 +335,7 @@ def restock(params, can_costs):
                     break
             item = {
                 'code': product.code, 'name': product.name, 'category': product.category.name, 'variant': h['label'],
-                'stock': _round(h['stock'], 2), 'min': h['min'] if h['min'] is not None else '',
+                'stock': _round(h['stock'], 3), 'min': h['min'] if h['min'] is not None else '',
                 'sold': _round(sold, 2), 'avg_daily': _round(avg, 2),
                 'coverage': _round(coverage, 1) if coverage is not None else '', 'priority': priority,
                 'suggested_units': suggested, 'suggested_text': text,
@@ -374,7 +374,7 @@ def rotation(params, can_costs):
     for d in _sale_lines(since, today, category=params.get('category')).values('product_id', 'total', 'cant', 'factor'):
         s = sold[d['product_id']]
         s['revenue'] += _f(d['total'])
-        s['units'] += d['cant'] * _f(d['factor'])
+        s['units'] += _f(d['cant']) * _f(d['factor'])
     last_sale = dict(SaleDetail.objects.filter(is_active=True, sale__is_active=True)
                      .values_list('product_id').annotate(last=Max('sale__date_joined')))
 
@@ -399,7 +399,7 @@ def rotation(params, can_costs):
         item = {
             'code': product.code, 'name': product.name, 'category': product.category.name, 'abc': '',
             'revenue': _round(s['revenue']), 'share': 0, 'cumulative': 0, 'units': _round(s['units'], 2),
-            'stock': _round(stock, 2),
+            'stock': _round(stock, 3),
             'rotation': _round(s['units'] / stock, 2) if stock > 0 and s['units'] else 0,
             'days_inventory': _round(days_inventory, 1) if days_inventory is not None else '',
             'last_sale': last.strftime('%Y-%m-%d') if last else 'Nunca', 'days_since': days_since if days_since is not None else '',

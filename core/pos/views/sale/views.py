@@ -15,6 +15,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from core.pos.forms import *
 from core.pos.utilities import printer
 from core.reports.forms import ReportForm
+from core.pos.stock_lines import parse_quantity
 from core.security.mixins import GroupPermissionMixin
 from core.pos.choices import PAYMENTMETHODS, TRANSFERMETHODS
 
@@ -149,7 +150,8 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                         detail.sale_id = sale.id
                         detail.product_id = product.id
                         detail.cost = product.cost_per_sale_unit()
-                        detail.cant = int(i['cant'])
+                        qty = parse_quantity(i['cant'], product)
+                        detail.cant = qty
                         detail.price = float(i['pvp'])
                         detail.dscto = float(i['dscto']) / 100
                         detail.save()
@@ -163,7 +165,7 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                             auto_product = auto.auto_product
 
                             # Descontar del inventario general del producto automático
-                            auto_product.stock -= auto.quantity * int(i['cant'])
+                            auto_product.stock -= auto.quantity * qty
                             auto_product.save()
 
                     sale.calculate_invoice()

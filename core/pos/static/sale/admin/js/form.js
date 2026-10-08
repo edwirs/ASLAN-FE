@@ -197,10 +197,11 @@ var sale = {
                         if (row.is_service) {
                             return 'N/A';
                         }
+                        var shown = parseFloat(data).toLocaleString('es-CL', {maximumFractionDigits: 3});
                         if (data > 0) {
-                            return '<span class="badge bg-success rounded-pill">' + parseFloat(data).toLocaleString('es-CL') + '</span>';
+                            return '<span class="badge bg-success rounded-pill">' + shown + '</span>';
                         }
-                        return '<span class="badge bg-warning rounded-pill">' + parseFloat(data).toLocaleString('es-CL') + '</span>';
+                        return '<span class="badge bg-warning rounded-pill">' + shown + '</span>';
                     }
                 },
                 {
@@ -228,13 +229,20 @@ var sale = {
             rowCallback: function (row, data, index) {
                 var tr = $(row).closest('tr');
                 var stock = !data.is_service ? data.stock : 1000000;
+                // Productos que se venden por peso o fracciones admiten hasta 3 decimales (0,295 kg)
                 tr.find('input[name="cant"]')
-                    .TouchSpin({
+                    .TouchSpin(data.allow_decimals ? {
+                        min: 0.001,
+                        max: stock,
+                        step: 0.1,
+                        decimals: 3,
+                        forcestepdivisibility: 'none'   // no redondear 0,295 al múltiplo del paso
+                    } : {
                         min: 1,
                         max: stock
                     })
                     .on('keypress', function (e) {
-                        return validate_text_box({'event': e, 'type': 'numbers'});
+                        return validate_text_box({'event': e, 'type': data.allow_decimals ? 'decimals' : 'numbers'});
                     });
 
                 tr.find('input[name="dscto_unitary"]')
@@ -597,7 +605,9 @@ $(function () {
         .off()
         .on('change', 'input[name="cant"]', function () {
             var tr = tblProducts.cell($(this).closest('td, li')).index();
-            sale.detail.products[tr.row].cant = parseInt($(this).val());
+            var item = sale.detail.products[tr.row];
+            var typed = parseFloat(String($(this).val()).replace(',', '.'));
+            item.cant = item.allow_decimals ? Math.round(typed * 1000) / 1000 : parseInt(typed);
             sale.calculateInvoice();
             $('td:last', tblProducts.row(tr.row).node()).html('$' + sale.detail.products[tr.row].total.toFixed(2));
         })

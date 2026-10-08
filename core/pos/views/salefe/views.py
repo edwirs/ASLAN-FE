@@ -18,6 +18,7 @@ from django.conf import settings
 from core.pos.forms import *
 from core.pos.utilities import printer
 from core.reports.forms import ReportForm
+from core.pos.stock_lines import parse_quantity
 from core.security.mixins import GroupPermissionMixin
 from core.pos.choices import PAYMENTMETHODS, TRANSFERMETHODS
 from core.services.factus import create_invoice, get_numbering_ranges, download_invoice_xml, download_invoice_pdf
@@ -179,7 +180,8 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
                         detail.sale_id = sale.id
                         detail.product_id = product.id
                         detail.cost = product.cost_per_sale_unit()
-                        detail.cant = int(i['cant'])
+                        qty = parse_quantity(i['cant'], product)
+                        detail.cant = qty
                         detail.price = float(i['pvp'])
                         detail.dscto = float(i['dscto']) / 100
                         detail.save()
@@ -192,7 +194,7 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
                         auto_products = ProductAutoAdd.objects.filter(trigger_product=product)
                         for auto in auto_products:
                             auto_product = auto.auto_product
-                            auto_product.stock -= auto.quantity * detail.cant
+                            auto_product.stock -= auto.quantity * qty
                             auto_product.save()
 
                     # Recalcular totales de factura

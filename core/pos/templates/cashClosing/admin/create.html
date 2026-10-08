@@ -331,6 +331,11 @@ textarea.form-control{
 
 
 {% block buttons %}
+{% if readonly and print_url %}
+    <button type="button" class="btn btn-primary btnPrintClosing" data-url="{{ print_url }}">
+        <i class="fas fa-print"></i> Imprimir tirilla
+    </button>
+{% endif %}
 <div class="d-none">
 
 </div>
@@ -339,4 +344,5 @@ textarea.form-control{
 {% block content_form_before %}    
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="{% static 'cashClosing/admin/js/form.js' %}"></script>
+    <iframe id="print_frame" style="display:none;"></iframe>
 {% endblock %}

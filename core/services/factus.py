@@ -45,6 +45,12 @@ def _as_money(value):
     return f"{value or 0:.2f}"
 
 
+def _as_quantity(value):
+    """Cantidad para Factus: 2 decimales si es entera (como siempre) y hasta 3 si es fraccionaria (0.295)."""
+    value = Decimal(str(value or 0))
+    return f"{value:.2f}" if value == value.to_integral_value() else f"{value.quantize(Decimal('0.001')):.3f}"
+
+
 def _nit_dv(nit):
     """Calcula el dígito de verificación DIAN para un NIT sin DV."""
     digits = "".join(char for char in str(nit) if char.isdigit())
@@ -196,7 +202,7 @@ def _build_items_payload(details, global_discount_rate, tax_rate):
         items.append({
             "code_reference": product.code,
             "name": product.name,
-            "quantity": _as_money(detail.cant),
+            "quantity": _as_quantity(detail.cant),
             "discount_rate": _as_money(effective_discount_rate * 100),
             "price": _as_money(detail.price),
             "unit_measure_code": "94",

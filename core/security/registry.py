@@ -109,7 +109,9 @@ PERMISSIONS = {
         ('view_kitchen_board', 'Ver el tablero de cocina'),
         ('mark_order_ready', 'Marcar pedidos como listos en cocina'),
     ],
-    'pos.CashClosing': crud('cashclosing', 'cierres de caja', ('view', 'add')),
+    'pos.CashClosing': crud('cashclosing', 'cierres de caja', ('view', 'add')) + [
+        ('print_cashclosing', 'Imprimir cierres de caja'),
+    ],
 
     # Inventario
     'pos.Buy': [
@@ -224,7 +226,7 @@ MENU = (
         Item('kitchen', 'Cocina', 'kitchen_board', 'pos.view_kitchen_board',
              q('pos', 'view_kitchen_board', 'mark_order_ready')),
         Item('cash_closing', 'Cierre de caja', 'cashClosing_list', 'pos.view_cashclosing',
-             crud_q('pos', 'cashclosing', ('view', 'add'))),
+             crud_q('pos', 'cashclosing', ('view', 'add')) + q('pos', 'print_cashclosing')),
     )),
     Section('Inventario', 'fas fa-warehouse', (
         Item('purchases', 'Compras', 'buy_admin_list', 'pos.view_buy',
@@ -303,6 +305,8 @@ LEGACY_MAP = {
                        'download_electronic_invoice_pdf', 'resend_electronic_invoice_email'),
     'pos.add_sale': q('pos', 'add_electronic_invoice'),
     'pos.delete_sale': q('pos', 'delete_electronic_invoice'),
+    # Los cierres de caja ya se podían ver: quien los veía también puede imprimirlos
+    'pos.view_cashclosing': q('pos', 'print_cashclosing'),
     # Acciones nuevas de notas crédito
     'pos.view_creditnote': q('pos', 'print_creditnote', 'download_creditnote_pdf', 'resend_creditnote_email'),
     # Consultar en la DIAN: quien podía crear/editar clientes

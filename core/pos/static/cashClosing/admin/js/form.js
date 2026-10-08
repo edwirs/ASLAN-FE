@@ -502,29 +502,36 @@ $(function () {
 
             success: function (request) {
 
-                $.confirm({
+                var goBack = function () {
+                    location.href = request.url;
+                };
 
-                    title: 'Éxito',
+                // Sin permiso de impresión no se ofrece imprimir
+                if (!request.print_url) {
 
-                    content:
-                        'El cierre de caja fue realizado correctamente',
-
-                    type: 'green',
-
-                    buttons: {
-
-                        ok: {
-
-                            text: 'Aceptar',
-
-                            btnClass: 'btn-success',
-
-                            action: function () {
-
-                                location.href = request.url;
+                    $.confirm({
+                        title: 'Éxito',
+                        content: 'El cierre de caja fue realizado correctamente',
+                        type: 'green',
+                        buttons: {
+                            ok: {
+                                text: 'Aceptar',
+                                btnClass: 'btn-success',
+                                action: goBack
                             }
                         }
-                    }
+                    });
+
+                    return;
+                }
+
+                dialog_action({
+                    title: 'Cierre registrado',
+                    content: 'El cierre de caja fue realizado correctamente. ¿Desea imprimir la tirilla?',
+                    success: function () {
+                        printClosingTicket(request.print_url, goBack);
+                    },
+                    cancel: goBack
                 });
             },
 
@@ -561,4 +568,34 @@ $(function () {
      * INICIALIZAR DIFERENCIA
      * ===================================================== */
     calculateDifference();
+});
+
+/* =========================================================
+ * IMPRIMIR LA TIRILLA (80 mm) DEL CIERRE
+ * ========================================================= */
+function printClosingTicket(url, done) {
+
+    var iframe = document.getElementById('print_frame');
+
+    iframe.onload = function () {
+
+        iframe.contentWindow.focus();
+
+        // Cuando se cierra el cuadro de impresión (imprimir o cancelar) se continúa
+        iframe.contentWindow.onafterprint = function () {
+            if (done) {
+                done();
+            }
+        };
+
+        iframe.contentWindow.print();
+    };
+
+    iframe.src = url;
+}
+
+$(function () {
+    $(document).on('click', '.btnPrintClosing', function () {
+        printClosingTicket($(this).data('url'), null);
+    });
 });

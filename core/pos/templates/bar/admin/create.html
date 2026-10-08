@@ -68,6 +68,7 @@ sidebar-collapse
                                     data-stock="{{ entry.total_stock|unlocalize }}"
                                     data-is_service="{{ product.is_service }}"
                                     data-unit="{{ product.unit_name }}"
+                                    data-decimals="{{ product.allow_decimals|yesno:'true,false' }}"
                                     >
                                     <div class="card-body" style="font-size: 14px;">
                                         <div class="product-thumb" style="position:relative; width:100%; height:90px; overflow:hidden; border-radius:.35rem; background:#f4f6f9; margin-bottom:.5rem;">

@@ -4,6 +4,8 @@ from django.forms import inlineformset_factory
 
 from .models import *
 from .images import ProductImageField
+import json as _json
+from .units import DECIMAL_UNITS, DEFAULT_UNIT, OTHER, STANDARD_UNITS, canonical_unit, unit_choices
 
 
 class CategoryForm(forms.ModelForm):
@@ -36,8 +38,19 @@ class CategoryForm(forms.ModelForm):
 
 
 class ProductForm(forms.ModelForm):
+    # Unidad de medida: se elige de una lista para evitar errores de digitación ("Otra…" permite crear una)
+    unit_name = forms.CharField(
+        max_length=30, required=False, label='Nombre de la unidad base',
+        widget=forms.Select(attrs={'class': 'form-control select2', 'style': 'width: 100%;',
+                                   'data-decimal-units': _json.dumps(DECIMAL_UNITS, ensure_ascii=False)}))
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._custom_units = [u for u in Product.objects.order_by().values_list('unit_name', flat=True).distinct() if u]
+        self.fields['unit_name'].widget.choices = unit_choices(
+            current=self.instance.unit_name if self.instance.pk else '', custom=self._custom_units)
+        if not self.instance.pk:
+            self.fields['unit_name'].initial = DEFAULT_UNIT
         self.fields['name'].widget.attrs['autofocus'] = True
         self.fields['presentation_mode'].required = False
 
@@ -58,9 +71,9 @@ class ProductForm(forms.ModelForm):
             'with_tax': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'presentation_mode': forms.RadioSelect(),
-            'min_stock': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '1', 'placeholder': 'Sin mínimo'}),
+            'min_stock': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': 'any', 'placeholder': 'Sin mínimo'}),
+            'allow_decimals': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'uses_presentations': forms.CheckboxInput(attrs={'class': 'form-check-input', 'role': 'switch'}),
-            'unit_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ej: Botella, Unidad, Kilo'}),
             'image': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/jpeg,image/png,image/webp'}),
         }
 
@@ -72,6 +85,17 @@ class ProductForm(forms.ModelForm):
         if isinstance(image, UploadedFile):
             return shrink_image(image)
         return image
+
+    def clean_unit_name(self):
+        value = (self.cleaned_data.get('unit_name') or '').strip()
+        if value == OTHER:
+            value = (self.data.get('unit_name_other') or '').strip()
+            if not value:
+                raise forms.ValidationError('Escriba el nombre de la unidad.')
+        value = canonical_unit(value, known=self._custom_units) or DEFAULT_UNIT
+        if len(value) > 30:
+            raise forms.ValidationError('El nombre de la unidad no puede superar 30 caracteres.')
+        return value
 
     def clean_presentation_mode(self):
         return self.cleaned_data.get('presentation_mode') or Product.MODE_CONVERSION

@@ -23,7 +23,7 @@ def kitchen_orders(request):
         for d in order.orderdetail_set.all():
             items.append({
                 'product': d.display_name(),
-                'qty': d.cant
+                'qty': float(d.cant)
             })
 
         data.append({

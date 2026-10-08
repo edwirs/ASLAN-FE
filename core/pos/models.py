@@ -76,12 +76,14 @@ class Product(models.Model):
     image = models.ImageField(upload_to='product/%Y/%m/%d', null=True, blank=True, verbose_name='Imagen')
     is_service = models.BooleanField(default=False, verbose_name='¿Sin Inventario?')
     with_tax = models.BooleanField(default=True, verbose_name='¿Se cobra impuesto?')
-    stock = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Stock')
+    stock = models.DecimalField(max_digits=12, decimal_places=3, default=0, verbose_name='Stock')
     is_active = models.BooleanField(default=True, verbose_name='Estado')
     unit_name = models.CharField(max_length=30, default='Unidad', verbose_name='Nombre de la unidad base')
     # Opcional: bajo este nivel el producto se marca "bajo" en los reportes de inventario.
     # Conversión de unidades: en unidad base. Stock por variante: se aplica a cada variante.
-    min_stock = models.DecimalField(max_digits=9, decimal_places=2, null=True, blank=True, verbose_name='Stock mínimo')
+    min_stock = models.DecimalField(max_digits=12, decimal_places=3, null=True, blank=True, verbose_name='Stock mínimo')
+    # Productos que se venden por peso o fracciones (kilos, litros...): la cantidad vendida admite hasta 3 decimales
+    allow_decimals = models.BooleanField(default=False, verbose_name='¿Permite cantidades decimales?')
     uses_presentations = models.BooleanField(default=False, verbose_name='¿Maneja presentaciones?')
     MODE_CONVERSION = 'conversion'
     MODE_VARIANTS = 'variants'
@@ -192,7 +194,7 @@ class ProductPresentation(models.Model):
     pvp = models.DecimalField(max_digits=11, decimal_places=2, default=0.00, verbose_name='Precio de Venta')
     barcode = models.CharField(max_length=50, null=True, blank=True, unique=True, verbose_name='Código de Barras')
     # Solo se usa en el modo "Stock por tamaño o variante"; en conversión el stock es el del producto.
-    stock = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Stock propio')
+    stock = models.DecimalField(max_digits=12, decimal_places=3, default=0, verbose_name='Stock propio')
     is_active = models.BooleanField(default=True, verbose_name='Estado')
 
     def __str__(self):
@@ -466,7 +468,7 @@ class Sale(models.Model):
             detail.price = float(detail.price)
             detail.iva = float(self.iva)
             detail.price_with_vat = detail.price + (detail.price * detail.iva)
-            detail.subtotal = detail.price * detail.cant
+            detail.subtotal = detail.price * float(detail.cant)
             detail.total_dscto = detail.subtotal * float(detail.dscto)
             detail.total_iva = (detail.subtotal - detail.total_dscto) * detail.iva
             detail.total = detail.subtotal - detail.total_dscto
@@ -545,7 +547,7 @@ class SaleDetail(models.Model):
     own_stock = models.BooleanField(default=False)  # True: descontó del stock propio de la presentación
     # Costo de una unidad vendida al momento de la venta (para márgenes exactos); None = desconocido
     cost = models.DecimalField(max_digits=11, decimal_places=2, null=True, blank=True)
-    cant = models.IntegerField(default=0)
+    cant = models.DecimalField(max_digits=12, decimal_places=3, default=0)  # admite decimales (kilos, litros)
     price = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     price_with_vat = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     subtotal = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
@@ -570,6 +572,7 @@ class SaleDetail(models.Model):
     def toJSON(self):
         item = model_to_dict(self, exclude=['sale'])
         item['product'] = self.product.toJSON()
+        item['cant'] = float(self.cant)
         item['factor'] = float(self.factor)
         item['cost'] = float(self.cost) if self.cost is not None else None
         item['display_name'] = self.display_name()
@@ -1142,7 +1145,7 @@ class OrderDetail(models.Model):
     presentation_name = models.CharField(max_length=50, blank=True, default='')
     factor = models.DecimalField(max_digits=9, decimal_places=3, default=1)
     own_stock = models.BooleanField(default=False)
-    cant = models.PositiveIntegerField(verbose_name='Cantidad')
+    cant = models.DecimalField(max_digits=12, decimal_places=3, verbose_name='Cantidad')
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name='Precio unitario')
     dscto = models.DecimalField(max_digits=5, decimal_places=2, default=0, verbose_name='Descuento (%)')
 

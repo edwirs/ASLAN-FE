@@ -4,12 +4,17 @@ from decimal import Decimal
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db.models import Sum
-from django.http import HttpResponse
+from django.http import HttpResponse, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.clickjacking import xframe_options_exempt
+from django.views import View
 from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, DetailView
 
 from core.pos.forms import CashClosingForm
-from core.pos.models import CashClosing, Sale, Expenses
+from core.pos.models import CashClosing, Company, Sale, Expenses
 from core.reports.forms import ReportForm
 
 MODULE_NAME = 'Cierres de caja'
@@ -41,9 +46,11 @@ class CashClosingListView(LoginRequiredMixin, PermissionRequiredMixin, FormView)
                         created_at__date__range=[start_date, end_date]
                     )
 
+                can_print = request.user.has_perm('pos.print_cashclosing')
                 for i in queryset.order_by('-id'):
                     data.append({
                         'id': i.id,
+                        'print_url': str(reverse_lazy('cashClosing_print_ticket', kwargs={'pk': i.id})) if can_print else '',
 
                         'created_at': i.created_at.strftime('%d/%m/%Y - %I:%M %p'),
                         'terminal': getattr(i, 'terminal', 'Principal'),
@@ -311,6 +318,8 @@ class CashClosingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateV
 
                 data['success'] = True
                 data['url'] = str(self.success_url)
+                if request.user.has_perm('pos.print_cashclosing'):
+                    data['print_url'] = str(reverse_lazy('cashClosing_print_ticket', kwargs={'pk': cash_closing.id}))
 
             else:
 
@@ -444,6 +453,8 @@ class CashClosingDetailView(
 
         context['readonly'] = True
         context['action'] = 'view'
+        if self.request.user.has_perm('pos.print_cashclosing'):
+            context['print_url'] = reverse_lazy('cashClosing_print_ticket', kwargs={'pk': obj.pk})
         context['cash_sales'] = obj.cash_sales
         context['credit_sales'] = obj.credit_sales
         context['debit_sales'] = obj.debit_sales
@@ -454,3 +465,43 @@ class CashClosingDetailView(
         context['expected_cash'] = obj.expected_cash
 
         return context
+
+
+# =========================================================
+# TIRILLA (80 mm) DEL CIERRE DE CAJA
+# =========================================================
+@method_decorator(xframe_options_exempt, name='dispatch')  # se muestra dentro de un iframe oculto para imprimir
+class CashClosingPrintView(LoginRequiredMixin, View):
+    """Tirilla de 80 mm con toda la información del cierre; se muestra en un iframe y se imprime desde el navegador."""
+
+    def get(self, request, *args, **kwargs):
+        if not request.user.has_perm('pos.print_cashclosing'):
+            return HttpResponseForbidden('Su perfil no tiene permiso para imprimir cierres de caja.')
+        closing = get_object_or_404(CashClosing.objects.select_related('user'), pk=kwargs['pk'])
+
+        # El período es el mismo que usó el cierre: desde el cierre anterior hasta este
+        previous = CashClosing.objects.filter(id__lt=closing.id).order_by('-id').first()
+        period_start = previous.created_at if previous else None
+        sales = Sale.objects.filter(creation_date__lte=closing.created_at)
+        if period_start:
+            sales = sales.filter(creation_date__gt=period_start)
+
+        # Detalle de gastos: solo se imprime si cuadra con el total guardado en el cierre
+        expenses = Expenses.objects.filter(source='caja', created_at__lte=closing.created_at.date())
+        if period_start:
+            expenses = expenses.filter(created_at__gt=period_start)
+        expense_list = list(expenses.order_by('id'))
+        if sum((e.amount for e in expense_list), Decimal('0.00')) != closing.expenses:
+            expense_list = []
+
+        context = {
+            'closing': closing,
+            'difference_abs': abs(closing.difference),
+            'company': Company.objects.first(),
+            'period_start': period_start,
+            'sales_count': sales.count(),
+            'tips': sales.aggregate(result=Sum('propina'))['result'] or Decimal('0.00'),
+            'expense_list': expense_list,
+            'printed_at': timezone.now(),
+        }
+        return render(request, 'cashClosing/format/ticket.html', context)
