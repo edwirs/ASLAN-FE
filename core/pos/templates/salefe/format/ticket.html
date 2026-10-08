@@ -72,9 +72,14 @@
         }
 
         .img-logo {
+            background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
             display: block;
             margin: 0 auto 2px auto;
-            width: 60px;
+            width: auto;
+            max-width: 60%;
+            max-height: 130px;
             height: auto;
             object-fit: contain;
         }
@@ -97,7 +102,7 @@
 </head>
 <body>
 <div class="content">
-    <img alt="" src="{{ sale.company.get_image }}" class="img-fluid d-block mx-auto img-logo">
+    <img alt="" src="{{ sale.company.get_image_url }}" class="img-fluid d-block mx-auto img-logo">
     <h1 class="head-name">{{ sale.company.name|upper }}</h1>
     <p class="text-center head-details">
         Dirección: {{ sale.company.address }}<br>

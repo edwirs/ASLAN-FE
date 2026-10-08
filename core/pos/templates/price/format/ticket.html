@@ -117,6 +117,9 @@
             border-bottom: 1px outset black;
         }
         .img-logo {
+            background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
             margin-top: 5px;
             width: 200px;
             height: 60px;
@@ -133,7 +136,7 @@
 <body>
 <div class="content">
     <div class="company">
-        <img alt="" src="{{ price.company.get_image }}" class="img-fluid d-block mx-auto img-logo">
+        <img alt="" src="{{ price.company.get_image_url }}" class="img-fluid d-block mx-auto img-logo">
         <p class="head-details">
             Dirección: {{ price.company.address }}<br>
             RUT: {{ price.company.ruc }}<br>

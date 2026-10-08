@@ -243,6 +243,12 @@ class Company(models.Model):
             return os.path.join(settings.MEDIA_ROOT, self.image.name)
         return os.path.join(settings.STATIC_URL, 'img/default/empty.png')
 
+    def get_image_url(self):
+        # URL pública del logo, para las tirillas que se muestran en el navegador (get_image devuelve la ruta en disco).
+        if self.image:
+            return f'{settings.MEDIA_URL}{self.image.name}'
+        return f'{settings.STATIC_URL}img/default/empty.png'
+
     def toJSON(self):
         item = model_to_dict(self)
         item['image'] = self.get_image()
