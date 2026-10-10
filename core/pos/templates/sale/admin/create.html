@@ -68,12 +68,12 @@
             <table class="table table-bordered" id="tblProducts">
                 <thead>
                 <tr>
-                    <th style="width: 5%;">Eliminar</th>
-                    <th style="width: 25%;">Producto</th>
-                    <th style="width: 5%;">Stock</th>
+                    <th style="width: 6%;">Eliminar</th>
+                    <th style="width: 20%;">Producto</th>
+                    <th style="width: 6%;">Stock</th>
                     <th style="width: 20%;">Cantidad</th>
-                    <th style="width: 15%;">P./Unitario</th>
-                    <th style="width: 10%;">Total</th>
+                    <th style="width: 26%;">P./Unitario</th>
+                    <th style="width: 14%;">Total</th>
                 </tr>
                 </thead>
                 <tbody></tbody>
@@ -180,6 +180,24 @@
 {% endblock %}
 
 {% block content_form_before %}
+    {{ product_options|json_script:"product-options" }}
+    <div class="modal fade" id="modalPresentations" tabindex="-1" aria-hidden="true" style="z-index: 1070;">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <div>
+                        <h5 class="modal-title mb-0" id="presentation_title"></h5>
+                        <small class="text-muted" id="presentation_stock"></small>
+                    </div>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-2">Elija la presentación:</p>
+                    <div class="list-group" id="presentation_options"></div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="modal fade" tabindex="-1" id="myModalSearchProducts">
         <div class="modal-dialog modal-xl modal-dialog-centered modal-fullscreen-sm-down">
             <div class="modal-content">
@@ -243,6 +261,7 @@
     <script src="{% static 'sale/admin/js/form.js' %}"></script>
     <script type="application/javascript">
         sale.detail.iva = {{ company.iva|safe }};
+        sale.canEditPrice = {{ perms.pos.edit_sale_price|yesno:'true,false' }};
         $(function () {
             sale.listProducts();
 

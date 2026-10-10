@@ -339,7 +339,14 @@ footer.main-footer {
 body .btn:not(.rounded-pill):not(.rounded-circle):not([class*="bootstrap-touchspin"]) { border-radius: .55rem !important; }
 body .btn-sm:not(.rounded-pill):not(.rounded-circle):not([class*="bootstrap-touchspin"]) { border-radius: .45rem !important; }
 body .btn-lg:not(.rounded-pill):not(.rounded-circle):not([class*="bootstrap-touchspin"]) { border-radius: .7rem !important; }
-body .btn[class*="bootstrap-touchspin"] { border-radius: 0 !important; }
+/* Campos con - y + (TouchSpin: cantidad, precio, descuento, valores con $ o %): se redondean solo las esquinas
+   de los extremos, igual que los demás botones; el campo y los prefijos/sufijos del medio quedan rectos. */
+body .input-group.bootstrap-touchspin .btn.bootstrap-touchspin-down { border-radius: .55rem 0 0 .55rem !important; }
+body .input-group.bootstrap-touchspin .btn.bootstrap-touchspin-up { border-radius: 0 .55rem .55rem 0 !important; }
+body .input-group.bootstrap-touchspin > input.form-control { border-radius: 0 !important; }
+body .input-group.bootstrap-touchspin .input-group-text,
+body .input-group.bootstrap-touchspin > .input-group-prepend > .input-group-text,
+body .input-group.bootstrap-touchspin > .input-group-append > .input-group-text { border-radius: 0 !important; }
 body .input-group > .btn:not(.rounded-pill):not(.rounded-circle):not([class*="bootstrap-touchspin"]):not(.x):not(:last-child) { border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
 body .input-group > .btn:not(.rounded-pill):not(.rounded-circle):not([class*="bootstrap-touchspin"]):not(.x):not(:first-child) { border-top-left-radius: 0 !important; border-bottom-left-radius: 0 !important; }
 
@@ -369,3 +376,7 @@ body .input-group > .form-control:not(:first-child):not(:nth-child(1)) { border-
 body .input-group > .form-control:first-child { border-top-left-radius: .55rem !important; border-bottom-left-radius: .55rem !important; }
 body .input-group > .input-group-prepend + .form-control { border-top-right-radius: .55rem !important; border-bottom-right-radius: .55rem !important; }
 body .input-group > .input-group-prepend + .form-control:not(:last-child) { border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+
+/* Detalle de la venta normal: los campos con - y + (cantidad, precio) no se parten en dos líneas */
+#tblProducts .bootstrap-touchspin { flex-wrap: nowrap; }
+#tblProducts .bootstrap-touchspin input.form-control { min-width: 0; }

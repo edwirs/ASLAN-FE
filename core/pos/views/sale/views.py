@@ -15,7 +15,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from core.pos.forms import *
 from core.pos.utilities import printer
 from core.reports.forms import ReportForm
-from core.pos.stock_lines import parse_quantity
+from core.pos.stock_lines import deduct_line, parse_quantity, resolve_lines
 from core.security.mixins import GroupPermissionMixin
 from core.pos.choices import PAYMENTMETHODS, TRANSFERMETHODS
 
@@ -144,29 +144,26 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                     # 🔥 ABRIR CAJÓN SOLO SI APLICA
                     if sale.paymentmethod in ['cash', 'mixto']:
                         printer.open_cash_drawer()
-                    for i in json.loads(request.POST['products']):
-                        product = Product.objects.get(pk=i['id'])
+                    # El precio, el factor y el stock salen del catálogo (producto o presentación elegida);
+                    # solo quien tiene permiso de editar precios puede cambiar el precio de la línea.
+                    can_edit_price = request.user.has_perm('pos.edit_sale_price')
+                    for line in resolve_lines(json.loads(request.POST['products']), allow_price_override=can_edit_price):
+                        product, presentation = line['product'], line['presentation']
                         detail = SaleDetail()
                         detail.sale_id = sale.id
                         detail.product_id = product.id
-                        detail.cost = product.cost_per_sale_unit()
-                        qty = parse_quantity(i['cant'], product)
-                        detail.cant = qty
-                        detail.price = float(i['pvp'])
-                        detail.dscto = float(i['dscto']) / 100
+                        detail.presentation = presentation
+                        detail.presentation_name = line['presentation_name']
+                        detail.factor = line['factor']
+                        detail.own_stock = line['own_stock']
+                        detail.cost = product.cost_per_sale_unit(presentation, line['factor'], line['own_stock'])
+                        detail.cant = line['cant']
+                        detail.price = float(line['price'])
+                        detail.dscto = float(line['dscto']) / 100
                         detail.save()
                         sale.calculate_detail()
-                        detail.product.stock -= detail.cant
-                        detail.product.save()
-
-                        # Manejo de productos automáticos
-                        auto_products = ProductAutoAdd.objects.filter(trigger_product=product)
-                        for auto in auto_products:
-                            auto_product = auto.auto_product
-
-                            # Descontar del inventario general del producto automático
-                            auto_product.stock -= auto.quantity * qty
-                            auto_product.save()
+                        # Descuenta del stock del producto o de la variante, y de los productos automáticos
+                        deduct_line(line)
 
                     sale.calculate_invoice()
                     data = {'print_url': str(reverse_lazy('sale_admin_print_invoice', kwargs={'pk': sale.id}))}
@@ -174,7 +171,11 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                 ids = json.loads(request.POST['ids'])
                 data = []
                 term = request.POST['term']
-                queryset = Product.objects.filter(Q(stock__gt=0) | Q(is_service=True)).exclude(id__in=ids).order_by('code')
+                # En stock por variante, el producto sirve si alguna variante activa tiene existencias.
+                variants_in_stock = Q(uses_presentations=True, presentation_mode=Product.MODE_VARIANTS,
+                                      presentations__is_active=True, presentations__stock__gt=0)
+                queryset = (Product.objects.filter(Q(stock__gt=0) | Q(is_service=True) | variants_in_stock)
+                            .exclude(id__in=ids).distinct().order_by('code'))
                 if len(term):
                     # Coincidencia exacta en code
                     exact_matches = queryset.filter(code__iexact=term)
@@ -235,6 +236,12 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
         context['action'] = 'add'
         context['company'] = Company.objects.first()
         context['final_consumer'] = self.get_final_consumer()
+        # Solo los productos con presentaciones activas necesitan el selector de presentación.
+        context['product_options'] = {
+            p.pk: p.sale_options()
+            for p in Product.objects.filter(is_active=True, uses_presentations=True,
+                                            presentations__is_active=True).distinct()
+        }
         context['module_name'] = MODULE_NAME
         return context
 

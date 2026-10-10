@@ -73,7 +73,8 @@ class BarCreateView(GroupPermissionMixin, CreateView):
                     if description:
                         sale.description = description
                     sale.save()
-                    lines = resolve_lines(json.loads(request.POST['products']))
+                    lines = resolve_lines(json.loads(request.POST['products']),
+                                          allow_price_override=request.user.has_perm('pos.edit_sale_price'))
                     for line in lines:
                         product, presentation = line['product'], line['presentation']
                         qty, factor, base_units = line['cant'], line['factor'], line['base_units']

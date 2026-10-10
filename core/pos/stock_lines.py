@@ -37,10 +37,22 @@ def parse_quantity(raw, product):
     return rounded
 
 
-def resolve_lines(raw_lines, snapshot=False):
+def parse_price(raw, product):
+    """Precio de venta escrito por el cajero: Decimal >= 0 con máximo 2 decimales."""
+    try:
+        price = Decimal(str(raw).replace(',', '.').strip())
+    except (InvalidOperation, ValueError):
+        raise Exception(f"Precio inválido para '{product.name}'.")
+    if not price.is_finite() or price < 0 or price >= Decimal('10000000'):
+        raise Exception(f"El precio de '{product.name}' debe estar entre 0 y 9.999.999.")
+    return price.quantize(Decimal('0.01'))
+
+
+def resolve_lines(raw_lines, snapshot=False, allow_price_override=False):
     """Valida un carrito contra la BD y devuelve las líneas listas para guardar.
 
-    ``snapshot=False``: carrito del navegador; el precio y el factor SIEMPRE salen del catálogo.
+    ``snapshot=False``: carrito del navegador; el precio y el factor SIEMPRE salen del catálogo, salvo que
+    ``allow_price_override`` (usuario con permiso de editar precios) y la línea traiga ``custom_price``.
     ``snapshot=True``: líneas de un pedido ya tomado; se respetan el precio, el factor y el tipo de stock
     guardados en el pedido (el precio pudo cambiar en el catálogo después), cada línea trae
     ``price``, ``factor``, ``own_stock`` y ``presentation_name``.
@@ -77,6 +89,8 @@ def resolve_lines(raw_lines, snapshot=False):
                 price = presentation.pvp
                 if not own:
                     factor = presentation.factor
+            if allow_price_override and raw.get('custom_price') not in (None, ''):
+                price = parse_price(raw['custom_price'], product)
 
         if own and presentation is not None:
             key = ('presentation', presentation.pk)

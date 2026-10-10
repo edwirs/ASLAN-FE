@@ -160,8 +160,143 @@ var sale = {
         this.detail.products.push(item);
         this.listProducts();
     },
+    // --- Presentaciones (caja, six pack, variantes...) ---
+    productOptions: {},
+    canEditPrice: false,
+    optionsFor: function (productId) {
+        var options = this.productOptions[productId];
+        return options && options.length > 1 ? options : null;
+    },
+    hasOwnStockVariants: function (productId) {
+        var options = this.productOptions[productId];
+        return !!(options && options.length && options[0].own_stock);
+    },
+    unitsInOtherLines: function (productId, exceptKey) {
+        var units = 0;
+        this.detail.products.forEach(function (line) {
+            if (line.id === productId && line.key !== exceptKey && !line.own_stock) {
+                units += line.cant * (line.factor || 1);
+            }
+        });
+        return units;
+    },
+    // Cuántas unidades de esta línea caben todavía (conversión: stock compartido del producto; variantes: stock propio)
+    availableQty: function (line) {
+        if (line.is_service) {
+            return Infinity;
+        }
+        var raw = line.own_stock ? line.row_stock : (line.stock - this.unitsInOtherLines(line.id, line.key)) / (line.factor || 1);
+        return line.allow_decimals ? Math.floor(raw * 1000 + 1e-6) / 1000 : Math.floor(raw + 1e-9);
+    },
+    // Agrega el producto; si tiene presentaciones, pregunta cuál.
+    pickProduct: function (item, done) {
+        var options = this.optionsFor(item.id);
+        if (options) {
+            this.showChooser(item, options, done);
+            return;
+        }
+        this.addLine(item, null);
+        if (done) {
+            done();
+        }
+    },
+    // ¿Ya están en el detalle todas las formas de vender este producto?
+    isFullyAdded: function (productId) {
+        var options = this.optionsFor(productId);
+        var lines = this.detail.products.filter(line => line.id === productId);
+        return options ? options.every(opt => lines.some(line => line.key === productId + '-' + (opt.presentation_id || 0))) : lines.length > 0;
+    },
+    addLine: function (item, opt) {
+        var hasOptions = !!this.optionsFor(item.id);
+        opt = opt || {presentation_id: null, name: '', factor: 1, pvp: item.pvp, own_stock: false, stock: null};
+        var key = item.id + '-' + (opt.presentation_id || 0);
+        var unit = item.unit_name || 'unidades';
+        var existing = this.detail.products.find(line => line.key === key);
+        if (existing) {
+            var next = Math.round((parseFloat(existing.cant) + 1) * 1000) / 1000;
+            if (this.availableQty(existing) < next) {
+                message_error('Stock insuficiente: solo hay ' + Math.max(this.availableQty(existing), 0).toLocaleString('es-CL', {maximumFractionDigits: 3}) + ' disponibles.');
+                return;
+            }
+            existing.cant = next;
+            this.listProducts();
+            return;
+        }
+        var line = $.extend({}, item, {
+            cant: 1,
+            key: key,
+            presentation_id: opt.presentation_id,
+            presentation_name: hasOptions ? opt.name : '',
+            factor: opt.factor,
+            own_stock: !!opt.own_stock,
+            row_stock: opt.own_stock ? opt.stock : null,
+            has_options: hasOptions,
+            pvp: opt.pvp,
+            base_pvp: opt.pvp
+        });
+        var min = line.allow_decimals ? 0.001 : 1;
+        var avail = this.availableQty(line);
+        if (avail < min) {
+            message_error('El stock de este producto esta en 0');
+            return;
+        }
+        line.cant = Math.min(1, avail);
+        this.addProduct(line);
+    },
+    showChooser: function (item, options, done) {
+        var self = this;
+        var list = $('#presentation_options').empty();
+        // No se ofrecen las presentaciones que ya están en el detalle
+        options = options.filter(opt => !self.detail.products.some(line => line.key === item.id + '-' + (opt.presentation_id || 0)));
+        if (!options.length) {
+            message_error('Ya agregó todas las presentaciones de este producto.');
+            if (done) {
+                done();
+            }
+            return;
+        }
+        var variants = !!options[0].own_stock;
+        var num = value => parseFloat(value).toLocaleString('es-CL', {maximumFractionDigits: 3});
+        $('#presentation_title').text(item.name);
+        $('#presentation_stock').text(item.is_service ? '' : (variants ? '' : 'Stock: ' + num(item.stock) + ' ' + (item.unit_name || '')));
+        options.forEach(function (opt) {
+            var key = item.id + '-' + (opt.presentation_id || 0);
+            var probe = {id: item.id, key: key, is_service: item.is_service, allow_decimals: item.allow_decimals,
+                stock: item.stock, factor: opt.factor, own_stock: !!opt.own_stock, row_stock: opt.stock};
+            var avail = self.availableQty(probe);
+            var min = item.allow_decimals ? 0.001 : 1;
+            var detail;
+            if (opt.own_stock) {
+                detail = 'Quedan ' + num(Math.max(avail, 0));
+            } else {
+                detail = (opt.factor === 1 ? '1 ' + item.unit_name : 'Contiene ' + num(opt.factor) + ' ' + item.unit_name) +
+                    (avail === Infinity ? '' : ' · disponibles: ' + num(Math.max(avail, 0)));
+            }
+            var btn = $('<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"></button>');
+            btn.prop('disabled', avail < min);
+            var info = $('<div></div>')
+                .append($('<div class="fw-bold"></div>').text(opt.name))
+                .append($('<small></small>').addClass(avail < min ? 'text-danger' : 'text-muted').text(avail < min ? 'Agotado' : detail));
+            btn.append(info).append($('<span class="badge bg-success rounded-pill fs-6"></span>').text('$' + parseFloat(opt.pvp).toLocaleString('es-CL')));
+            btn.on('click', function () {
+                self.chooserModal.hide();
+                self.addLine(item, opt);
+                if (done) {
+                    done();
+                }
+            });
+            list.append(btn);
+        });
+        if (!this.chooserModal) {
+            this.chooserModal = new bootstrap.Modal(document.getElementById('modalPresentations'));
+        }
+        this.chooserModal.show();
+    },
+    // Un producto con presentaciones sigue en la búsqueda hasta que se agreguen todas.
     getProductIds: function () {
-        return this.detail.products.map(value => value.id);
+        var self = this;
+        var ids = this.detail.products.filter(value => !value.has_options || self.isFullyAdded(value.id)).map(value => value.id);
+        return ids.filter((id, index) => ids.indexOf(id) === index);
     },
     listProducts: function () {
         this.calculateInvoice();
@@ -186,7 +321,10 @@ var sale = {
                     targets: [-5],
                     class: 'text-center',
                     render: function (data, type, row) {
-                        
+                        // Productos con presentaciones: se muestra cuál se eligió
+                        if (type === 'display' && row.has_options && row.presentation_name) {
+                            return $('<div>').text(data).html() + ' <span class="badge bg-info ms-1">' + $('<div>').text(row.presentation_name).html() + '</span>';
+                        }
                         return data;
                     }
                 },
@@ -196,6 +334,12 @@ var sale = {
                     render: function (data, type, row) {
                         if (row.is_service) {
                             return 'N/A';
+                        }
+                        // Stock en unidades de la línea: las variantes usan el suyo; una presentación, cuántas caben en el stock
+                        if (row.own_stock) {
+                            data = row.row_stock;
+                        } else if (row.factor && row.factor !== 1) {
+                            data = row.allow_decimals ? data / row.factor : Math.floor(data / row.factor + 1e-9);
                         }
                         var shown = parseFloat(data).toLocaleString('es-CL', {maximumFractionDigits: 3});
                         if (data > 0) {
@@ -212,7 +356,22 @@ var sale = {
                     }
                 },
                 {
-                    targets: [-1, -2],
+                    targets: [-2],
+                    class: 'text-center',
+                    render: function (data, type, row) {
+                        if (type !== 'display' || !sale.canEditPrice) {
+                            return '$' + parseFloat(data).toLocaleString('es-CL');
+                        }
+                        // Quien tiene permiso puede cambiar el precio de venta de la línea (cliente especial, promoción...)
+                        var changed = row.base_pvp !== undefined && parseFloat(data) !== parseFloat(row.base_pvp);
+                        var original = row.base_pvp !== undefined ? '$' + parseFloat(row.base_pvp).toLocaleString('es-CL') : '';
+                        return '<span title="' + (changed ? 'Precio original: ' + original : 'Editable') + '">' +
+                            '<input type="text" autocomplete="off" name="pvp" class="form-control' +
+                            (changed ? ' border-warning' : '') + '" value="' + parseFloat(data) + '"></span>';
+                    }
+                },
+                {
+                    targets: [-1],
                     class: 'text-center',
                     render: function (data, type, row) {
                         return '$' + parseFloat(data).toLocaleString('es-CL');
@@ -228,7 +387,10 @@ var sale = {
             ],
             rowCallback: function (row, data, index) {
                 var tr = $(row).closest('tr');
-                var stock = !data.is_service ? data.stock : 1000000;
+                var stock = sale.availableQty(data);
+                if (stock === Infinity) {
+                    stock = 1000000;
+                }
                 // Productos que se venden por peso o fracciones admiten hasta 3 decimales (0,295 kg)
                 tr.find('input[name="cant"]')
                     .TouchSpin(data.allow_decimals ? {
@@ -243,6 +405,20 @@ var sale = {
                     })
                     .on('keypress', function (e) {
                         return validate_text_box({'event': e, 'type': data.allow_decimals ? 'decimals' : 'numbers'});
+                    });
+
+                // El precio editable se ve igual que la cantidad: campo con - y +
+                var priceBase = data.base_pvp !== undefined ? data.base_pvp : data.pvp;
+                tr.find('input[name="pvp"]')
+                    .TouchSpin({
+                        min: 0,
+                        max: 9999999.99,
+                        step: priceBase >= 1000 ? 100 : 1,
+                        decimals: priceBase % 1 !== 0 ? 2 : 0,
+                        forcestepdivisibility: 'none'
+                    })
+                    .on('keypress', function (e) {
+                        return validate_text_box({'event': e, 'type': 'decimals'});
                     });
 
                 tr.find('input[name="dscto_unitary"]')
@@ -267,6 +443,11 @@ var sale = {
 };
 
 $(function () {
+    try {
+        sale.productOptions = JSON.parse($('#product-options').text() || '{}') || {};
+    } catch (e) {
+        sale.productOptions = {};
+    }
     select_client = $('select[name="client"]');
     input_cash = $('input[name="cash"]');
     input_change = $('input[name="change"]');
@@ -501,12 +682,11 @@ $(function () {
         select: function (event, ui) {
             event.preventDefault();
             $(this).blur();
-            if (ui.item.stock === 0 && !ui.item.is_service) {
+            if (ui.item.stock === 0 && !ui.item.is_service && !sale.hasOwnStockVariants(ui.item.id)) {
                 message_error('El stock de este producto esta en 0');
                 return false;
             }
-            ui.item.cant = 1;
-            sale.addProduct(ui.item);
+            sale.pickProduct(ui.item);
             $(this).val('').focus();
         }
     });
@@ -594,9 +774,13 @@ $(function () {
         .on('click', 'a[rel="add"]', function () {
             var tr = tblSearchProducts.cell($(this).closest('td, li')).index();
             var row = tblSearchProducts.row(tr.row).data();
-            row.cant = 1;
-            sale.addProduct(row);
-            tblSearchProducts.row(tr.row).remove().draw();
+            var tableRow = tblSearchProducts.row(tr.row);
+            sale.pickProduct(row, function () {
+                // Sale de la lista cuando ya no quedan presentaciones por agregar
+                if (sale.isFullyAdded(row.id)) {
+                    tableRow.remove().draw();
+                }
+            });
         });
 
     // Detail products
@@ -610,6 +794,23 @@ $(function () {
             item.cant = item.allow_decimals ? Math.round(typed * 1000) / 1000 : parseInt(typed);
             sale.calculateInvoice();
             $('td:last', tblProducts.row(tr.row).node()).html('$' + sale.detail.products[tr.row].total.toFixed(2));
+        })
+        .on('change', 'input[name="pvp"]', function () {
+            var tr = tblProducts.cell($(this).closest('td, li')).index();
+            var item = sale.detail.products[tr.row];
+            var typed = parseFloat(String($(this).val()).replace(',', '.'));
+            if (isNaN(typed) || typed < 0 || typed >= 10000000) {
+                typed = item.base_pvp !== undefined ? item.base_pvp : item.pvp;
+                message_error('Ingrese un precio válido (entre 0 y 9.999.999).');
+            }
+            item.pvp = Math.round(typed * 100) / 100;
+            var changed = item.base_pvp !== undefined && item.pvp !== item.base_pvp;
+            $(this).val(item.pvp)
+                .toggleClass('border-warning', changed);
+            $(this).closest('span[title]')
+                .attr('title', changed ? 'Precio original: $' + parseFloat(item.base_pvp).toLocaleString('es-CL') : 'Editable');
+            sale.calculateInvoice();
+            $('td:last', tblProducts.row(tr.row).node()).html('$' + parseFloat(item.total).toLocaleString('es-CL'));
         })
         .on('change', 'input[name="dscto_unitary"]', function () {
             var tr = tblProducts.cell($(this).closest('td, li')).index();
@@ -747,7 +948,13 @@ $(function () {
         }
         var form = $(this)[0];
         var params = new FormData(form);
-        params.append('products', JSON.stringify(sale.detail.products));
+        params.append('products', JSON.stringify(sale.detail.products.map(function (line) {
+            var sent = $.extend({}, line);
+            if (sale.canEditPrice && line.base_pvp !== undefined && line.pvp !== line.base_pvp) {
+                sent.custom_price = line.pvp;   // el servidor solo lo respeta si el usuario tiene permiso
+            }
+            return sent;
+        })));
         var url_refresh = $(this).attr('data-url');
         var args = {
             'params': params,

@@ -101,7 +101,7 @@ sidebar-collapse
     <div class="col-lg-5">
         <div class="card border p-3 mb-4 h-100">
             <div class="table-responsive" style="max-height: 210px; overflow-y: auto;">
-                <table class="table table-bordered table-header-pos" id="tblProductsBarra">
+                <table class="table table-bordered table-header-pos" id="tblProductsBarra"{% if perms.pos.edit_sale_price %} data-edit-price="1"{% endif %}>
                     <thead>
                     <tr style="border: none;">
                         <th class="" style="width: 50%;">Producto</th>

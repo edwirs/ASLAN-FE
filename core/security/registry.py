@@ -64,6 +64,7 @@ PERMISSIONS = {
         ('delete_sale', 'Eliminar facturas'),
         ('delivered_sale', 'Marcar facturas como entregadas'),
         ('discounts_sale', 'Aplicar descuentos en facturas'),
+        ('edit_sale_price', 'Editar el precio de venta (facturas y ventas rápidas)'),
         ('view_sale_client', 'Ver facturas por cliente'),
         # Facturas electrónicas
         ('view_electronic_invoice', 'Ver facturas electrónicas'),
@@ -208,7 +209,8 @@ MENU = (
     )),
     Section('Facturas', 'fas fa-file-invoice', (
         Item('sales', 'Facturas', 'sale_admin_list', 'pos.view_sale',
-             q('pos', 'view_sale', 'add_sale', 'delete_sale', 'delivered_sale', 'discounts_sale', 'view_sale_client')),
+             q('pos', 'view_sale', 'add_sale', 'delete_sale', 'delivered_sale', 'discounts_sale', 'edit_sale_price',
+               'view_sale_client')),
         Item('electronic_invoices', 'Facturas Electrónicas', 'sale_Fe_admin_list', 'pos.view_electronic_invoice',
              q('pos', 'view_electronic_invoice', 'add_electronic_invoice', 'delete_electronic_invoice',
                'print_electronic_invoice', 'download_electronic_invoice_pdf', 'resend_electronic_invoice_email')),
