@@ -75,7 +75,6 @@ PERMISSIONS = {
         ('resend_electronic_invoice_email', 'Reenviar facturas electrónicas por correo'),
         # Operaciones
         ('add_bar', 'Registrar ventas rápidas (barra)'),
-        ('list_employee', 'Preseleccionarse como empleado en las ventas rápidas'),
         # Reportes
         ('report_sales_menu', 'Ver reporte de ventas totales'),
         ('report_employee_menu', 'Ver reporte de ventas por empleado'),
@@ -222,7 +221,7 @@ MENU = (
     )),
     Section('Operaciones', 'fas fa-utensils', (
         Item('quick_sales', 'Ventas Rápidas', 'bar_admin_create', 'pos.add_bar',
-             q('pos', 'add_bar', 'list_employee')),
+             q('pos', 'add_bar')),
         Item('table_orders', 'Ventas Mesas', 'order_list', 'pos.view_order',
              q('pos', 'view_order', 'add_order', 'delete_order')),
         Item('kitchen', 'Cocina', 'kitchen_board', 'pos.view_kitchen_board',

@@ -35,10 +35,8 @@ class BarCreateView(GroupPermissionMixin, CreateView):
                     iva = float(company.iva) / 100
                     sale = Sale()
                     sale.company = company
-                    if request.user.username == 'meseros' or request.user.username == 'meseros2':
-                        sale.employee_id = request.POST.get('employee')
-                    else:
-                        sale.employee_id = request.user.id
+                    # La venta queda siempre a nombre del usuario que inició sesión
+                    sale.employee_id = request.user.id
                     sale.client = Client.get_final_consumer()
                     sale.iva = iva
                     sale.dscto = float(request.POST['dscto']) / 100
@@ -54,13 +52,9 @@ class BarCreateView(GroupPermissionMixin, CreateView):
                         sale.daviplata_value = float(request.POST.get('daviplata_value') or 0)
                     else:
                         sale.transfermethods = None
-                    sale.typemethods = request.POST.get('typemethods') or 'fullpayment'
-                    if sale.typemethods == 'credit':
-                        sale.expiration_date = request.POST.get('expiration_date') or None
-                        if not sale.expiration_date:
-                            raise Exception('Ingrese la fecha de vencimiento de la venta a crédito.')
-                    else:
-                        sale.expiration_date = None
+                    # La venta rápida siempre es de contado
+                    sale.typemethods = 'fullpayment'
+                    sale.expiration_date = None
 
                     if request.POST.get('switchDescuento') == 'on':
                         sale.autorization_discount = (request.POST['autorization_discount'])

@@ -806,18 +806,12 @@ class BarForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
 
         self.fields['client'].queryset = Client.objects.none()
-        if not self.instance.pk:  # solo en formularios nuevos
-            self.fields['expiration_date'].initial = next_month_day_10()
-
-        # Ordenar alfabéticamente por nombre (ajusta al campo correcto)
-        self.fields['employee'].queryset = User.objects.all().order_by('names')
-        
-        if user and user.has_perm('pos.list_employee'):  # cambia al permiso real
-            self.fields['employee'].initial = user.pk  # o user.id
 
     class Meta:
         model = Sale
         fields = '__all__'
+        # La venta rápida es siempre de contado y del usuario que inició sesión
+        exclude = ('employee', 'typemethods', 'expiration_date')
         widgets = {
             'client': forms.Select(attrs={'class': 'form-select select2'}),
             'date_joined': forms.DateInput(format='%Y-%m-%d', attrs={
@@ -873,16 +867,6 @@ class BarForm(forms.ModelForm):
                 'class': 'select2',
                 'style': 'width: 100%'
             }),
-            'typemethods': forms.Select(attrs={
-                'class': 'select2',
-                'style': 'width: 100%'
-            }),
-            'expiration_date': forms.DateInput(format='%Y-%m-%d', attrs={
-                'class': 'form-control datetimepicker-input',
-                'id': 'expiration_date',
-                'data-toggle': 'datetimepicker',
-                'data-target': '#expiration_date'
-            }),
             'propina': forms.TextInput(attrs={
                 'class': 'form-control',
                 'autocomplete': 'off'
@@ -901,10 +885,6 @@ class BarForm(forms.ModelForm):
             }),
             'discount_value': forms.TextInput(attrs={
                 'class': 'form-control'
-            }),
-            'employee': forms.Select(attrs={
-                'class': 'form-select select2',
-                'style': 'width: 100%'
             }),
             'description': forms.Textarea(attrs={
                 'class': 'form-control',
