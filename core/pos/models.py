@@ -722,6 +722,7 @@ class Buy(models.Model):
     change = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Cambio')
     paymentmethod = models.CharField(max_length=50, choices=PAYMENTMETHODS, default=PAYMENTMETHODS[0][0], verbose_name='Método de pago')
     transfermethods = models.CharField(max_length=50, choices=TRANSFERMETHODS, default=TRANSFERMETHODS[0][0], verbose_name='Tipo transferencia', null=True)
+    description = models.CharField(max_length=500, null=True, blank=True, verbose_name='Observaciones')
     is_active = models.BooleanField(default=True, verbose_name='Estado')
 
     def __str__(self):
@@ -732,6 +733,9 @@ class Buy(models.Model):
 
     def get_full_subtotal(self):
         return float(self.subtotal_0) + float(self.subtotal_12)
+
+    def get_iva_percent(self):
+        return int(self.iva * 100)
 
     def calculate_invoice(self):
         self.subtotal_0 = float(self.buydetail_set.filter(product__with_tax=False).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))

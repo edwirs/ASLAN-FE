@@ -1,4 +1,5 @@
 {% load static %}
+{% load humanize %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,8 +9,7 @@
     <link href="{% static 'lib/bootstrap-5.0.2/css/bootstrap.min.css' %}" rel="stylesheet">
     <style>
         @page {
-            width: 139.7mm;
-            height: 215.9mm;
+            size: 80mm auto;
             margin: 0;
         }
 
@@ -23,78 +23,45 @@
         }
 
         .content {
-            width: 139.7mm;
+            width: 100%;
             padding: 10px;
         }
 
         .head-name {
-            margin-top: 10px;
-            font-size: 15px;
+            margin-top: 0;
+            font-size: 18px;
             font-weight: bold;
             text-transform: uppercase;
             margin-bottom: 0;
             text-align: center;
-        }
-
-        .head-voucher{
-            font-size: 20px;
-            text-align: right;
-            margin-top: -120px;
-            margin-bottom: 0;
-            font-weight: bold;
         }
 
         .head-voucher-number {
             font-size: 10px;
-            text-align: right;
-            margin-top: 20px;
-            margin-bottom: 0;
-            font-weight: bold;
-        }
-
-        .head-voucher-date{
-            font-size: 10px;
-            text-align: right;
+            text-align: center;
             margin-top: 0;
             margin-bottom: 0;
             font-weight: bold;
         }
+
         .head-details {
-            margin-top: 0px;
+            margin-top: 0;
             margin-bottom: 5px;
+            text-transform: uppercase;
         }
 
-        .head-data-header {
-            text-align: center;
-            text-transform: uppercase;
-            margin-top: 50px;
-            border: 1px solid black;
-            width: 70mm;
-            background-color: darkgray;
-        }
         .head-data {
             text-align: left;
             text-transform: uppercase;
-            margin-top: -17px;
-            border: 1px solid black;
-            width: 70mm;
+            margin-bottom: 10px;
         }
 
         .table {
             color: black;
         }
 
-        .table-header{
-            text-align: center;
-            text-transform: uppercase;
-            margin-top: 10px;
-            border: 1px solid black;
-            background-color: darkgray;
-        }
         #details thead tr th {
-            border: 1px outset black;
-            font-size: 10px;
-            text-align: center;
+            border-bottom: 1px outset black;
         }
 
         .table td, .table th {
@@ -102,133 +69,145 @@
             color: black;
             font-size: 10px;
             text-transform: uppercase;
-            border: 1px outset black;
         }
-        .total{
-            width: 30%; 
-            float: right;  
-        }
-        
-        .tabletotal td, .tabletotal th {
-            padding: 0;
-            color: black;
-            font-size: 10px;
-            text-transform: uppercase;
-            border-bottom: 1px outset black;
-        }
+
         .img-logo {
             background: #fff;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
-            margin-top: 5px;
-            width: 200px;
-            height: 60px;
-            margin-bottom: 5px;
-            align-items: left;
-            text-align: left;
+            display: block;
+            margin: 0 auto 2px auto;
+            width: auto;
+            max-width: 60%;
+            max-height: 130px;
+            height: auto;
+            object-fit: contain;
         }
-        .company{
-            border: 1px solid black;
-            width: 70mm;
+
+        .observations {
+            text-transform: none;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            margin-bottom: 5px;
+        }
+
+        .dotted-separator {
+            border: none !important;
+            border-top: 1px dotted black !important;
+            margin: 5px 0;
+            color: black;
+            background-color: transparent !important;
         }
     </style>
 </head>
 <body>
 <div class="content">
-    <div class="company">
-        <img alt="" src="{{ buy.company.get_image_url }}" class="img-fluid d-block mx-auto img-logo">
-        <p class="head-details">
-            Dirección: {{ buy.company.address }}<br>
-            RUT: {{ buy.company.ruc }}<br>
-            Celular: {{ buy.company.mobile }}<br>
-            Email: {{ buy.company.email }}
-        </p>    
-    </div>
-    
-    <p class="head-voucher">COMPRA</p>
-    <p class="head-voucher-number">N° COMPRA: {{ buy.id }}</p>
-    <p class="head-voucher-date">FECHA: {{ buy.date_joined|date:'c' }}</p>
-
-    <p class="head-data-header">
-        <b>PROVEEDOR</b> 
+    <img alt="" src="{{ buy.company.get_image_url }}" class="img-fluid d-block mx-auto img-logo">
+    <h1 class="head-name">{{ buy.company.name|upper }}</h1>
+    <p class="text-center head-details">
+        Dirección: {{ buy.company.address }}<br>
+        RUT: {{ buy.company.ruc }}<br>
+        Teléfono: {{ buy.company.phone }} / Celular: {{ buy.company.mobile }}<br>
+        Email: {{ buy.company.email }}
     </p>
+
+    <p class="text-center head-voucher-number">COMPRA N° {{ buy.id }}</p>
+
+    <hr class="dotted-separator">
+
     <p class="head-data">
-        <b>Nombre:</b> {{ buy.client.names }}<br>
-        <b>cédula:</b> {{ buy.client.dni }}<br>
-        <b>Teléfono:</b> {{ buy.client.mobile }}<br>
-        <b>Dirección:</b> {{ buy.client.address }}<br>
+        <b>Fecha de registro:</b> {{ buy.date_joined|date:'c' }}<br>
+        <b>Compra:</b> {{ buy.id }}<br>
+        <b>Proveedor:</b> {{ buy.provider.names }}<br>
+        <b>Número de documento:</b> {{ buy.provider.dni }}<br>
+        <b>Método de pago:</b> {{ buy.get_paymentmethod_display }}<br>
     </p>
 
-    <p class="table-header">
-        <b>PRODUCTOS</b> 
-    </p>
-    <table class="table table-borderless table-sm" id="details" style="margin-top: -16px;">
+    <hr class="dotted-separator">
+
+    <table class="table table-borderless table-sm" id="details" style="margin-bottom: 0">
         <thead>
         <tr>
-            <th style="width: 15%;">Codigo</th>
-            <th style="width: 40%;">Descripción</th>
-            <th style="width: 15%;">Cantidad</th>
-            <th style="width: 15%;">P./Unitario</th>
-            <th style="width: 15%;" class="text-right">Subtotal</th>
+            <th style="width: 15%;">Cant.</th>
+            <th style="width: 65%;">Descripción</th>
+            <th style="width: 20%;" class="text-right">Total</th>
         </tr>
         </thead>
         <tbody>
         {% for detail in buy.buydetail_set.all %}
             <tr>
-                <td>{{ detail.product.code }}</td>
+                <td>{{ detail.cant|floatformat:"-3" }}</td>
                 <td>{{ detail.display_name }}</td>
-                <td>{{ detail.cant }}</td>
-                <td>{{ detail.price|floatformat:2 }}</td>
-                <td class="text-right">{{ detail.total|floatformat:2 }}</td>
+                <td class="text-right">$ {{ detail.total|floatformat:0|intcomma }}</td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
 
-    <div class="total">
-        <table class="tabletotal table-borderless table-sm text-uppercase mt-3" id="totals">
-            <thead>
-            <tr>
-                <th style="width: 15%;"></th>
-                <th style="width: 15%;"></th>
-            </tr>
-            </thead>
-            <tbody id="totalbody">
-            <tr>
-                <td class="float-right font-weight-bold">Subtotal sin impuestos</td>
-                <td class="text-right">{{ buy.get_subtotal_without_taxes|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td class="float-right font-weight-bold">Descuentos</td>
-                <td class="text-right">{{ buy.total_dscto|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td class="float-right font-weight-bold">Subtotal 0%</td>
-                <td class="text-right">{{ buy.subtotal_0|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td class="float-right font-weight-bold">IVA {{ sale.get_iva_percent }}%:</td>
-                <td class="text-right">{{ buy.total_iva|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td class="float-right font-weight-bold">Descuento {{ sale.dscto|floatformat:2 }}%</td>
-                <td class="text-right">{{ buy.total_dscto|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td class="float-right font-weight-bold">Total</td>
-                <td class="text-right">{{ buy.total|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td class="float-right font-weight-bold">Efectivo</td>
-                <td class="text-right">{{ buy.cash|floatformat:2 }}</td>
-            </tr>
-            <tr>
-                <td class="float-right font-weight-bold">Cambio</td>
-                <td class="text-right">{{ buy.change|floatformat:2 }}</td>
-            </tr>
-            </tbody>
-        </table>
-    </div>
+    <hr class="dotted-separator">
+
+    <table class="table table-borderless table-sm text-uppercase mt-3">
+        <thead>
+        <tr>
+            <th style="width: 40%;"></th>
+            <th style="width: 40%;"></th>
+            <th style="width: 20%;"></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td></td>
+            <td class="float-right font-weight-bold">Subtotal</td>
+            <td class="text-right">$ {{ buy.get_subtotal_without_taxes|floatformat:0|intcomma }}</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td class="float-right font-weight-bold">IVA {{ buy.get_iva_percent }}%:</td>
+            <td class="text-right">$ {{ buy.total_iva|floatformat:0|intcomma }}</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td class="float-right font-weight-bold">Descuentos</td>
+            <td class="text-right">$ {{ buy.total_dscto|floatformat:0|intcomma }}</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td class="float-right font-weight-bold">Total</td>
+            <td class="text-right">$ {{ buy.total|floatformat:0|intcomma }}</td>
+        </tr>
+        </tbody>
+    </table>
+    <hr class="dotted-separator">
+    <table class="table table-borderless table-sm text-uppercase mt-3">
+        <thead>
+        <tr>
+            <th style="width: 40%;"></th>
+            <th style="width: 40%;"></th>
+            <th style="width: 20%;"></th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <td></td>
+            <td class="float-right font-weight-bold">Efectivo pagado</td>
+            <td class="text-right">$ {{ buy.cash|floatformat:0|intcomma }}</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td class="float-right font-weight-bold">Cambio</td>
+            <td class="text-right">$ {{ buy.change|floatformat:0|intcomma }}</td>
+        </tr>
+        </tbody>
+    </table>
+    {% if buy.description %}
+        <hr class="dotted-separator">
+        <p class="head-data observations"><b>Observaciones:</b><br>{{ buy.description|linebreaksbr }}</p>
+    {% endif %}
+    <p class="text-center head-details">
+        Elaborado por: ASLAN Tecnologia<br>
+        Tel: 3002308365
+    </p>
 </div>
 </body>
 </html>

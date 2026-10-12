@@ -398,7 +398,8 @@ class SaleForm(forms.ModelForm):
             }),
             'description': forms.Textarea(attrs={
                 'class': 'form-control',
-                'rows': 8,
+                'id': 'sale_observations',
+                'rows': 3,
                 'placeholder': 'Observaciones de la venta...',
                 'style': 'resize:none;'
             }),
@@ -641,6 +642,13 @@ class BuyForm(forms.ModelForm):
             'paymentmethod': forms.Select(attrs={
                 'class': 'select2',
                 'style': 'width: 100%'
+            }),
+            'description': forms.Textarea(attrs={
+                'id': 'buy_observations',
+                'rows': 3,
+                'class': 'form-control w-100',
+                'placeholder': 'Observaciones de la compra...',
+                'style': 'resize:none;'
             }),
         }
 

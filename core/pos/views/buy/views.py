@@ -5,9 +5,13 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import Group
 from django.db import transaction
 from django.db.models import Q
+from django.conf import settings
 from django.http import HttpResponse, HttpResponseRedirect
+from django.shortcuts import render
 from django.urls import reverse_lazy
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import CreateView, DeleteView, FormView
 
 from core.pos.forms import *
@@ -80,6 +84,7 @@ class BuyCreateView(GroupPermissionMixin, CreateView):
                     buy.change = float(request.POST['change'])
                     buy.paymentmethod = (request.POST['paymentmethod'])
                     buy.transfermethods = (request.POST['transfermethods'])
+                    buy.description = request.POST.get('description', '').strip()[:500] or None
                     buy.save()
                     update_costs = request.POST.get('update_costs') == 'on'
                     products, holders = {}, {}
@@ -237,13 +242,14 @@ class BuyDeleteView(GroupPermissionMixin, DeleteView):
         return context
 
 
+@method_decorator(xframe_options_exempt, name='dispatch')
 class BuyPrintInvoiceView(LoginRequiredMixin, View):
+    """Tirilla de la compra (80 mm), igual que la de venta: se imprime desde un iframe oculto."""
+
     def get(self, request, *args, **kwargs):
         try:
             buy = Buy.objects.get(id=self.kwargs['pk'])
-            context = {'price': buy, 'height': 450 + buy.pricedetail_set.all().count() * 10}
-            pdf_file = printer.create_pdf(context=context, template_name='buy/format/ticket.html')
-            return HttpResponse(pdf_file, content_type='application/pdf')
-        except:
-            pass
-        return HttpResponseRedirect(settings.LOGIN_REDIRECT_URL)
+        except Buy.DoesNotExist:
+            return HttpResponseRedirect(settings.LOGIN_REDIRECT_URL)
+        context = {'buy': buy, 'title': f'Compra N° {buy.id}'}
+        return render(request, 'buy/format/ticket.html', context)

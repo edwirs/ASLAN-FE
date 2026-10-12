@@ -530,10 +530,21 @@ $(function () {
             'params': params,
             'success': function (request) {
                 dialog_action({
-                    'content': '¿Desea imprimir la boleta de venta?',
+                    'content': '¿Desea imprimir la tirilla de la compra?',
                     'success': function () {
-                        window.open(request.print_url, '_blank');
-                        location.href = url_refresh;
+                        // La tirilla se carga en un iframe oculto y abre el cuadro de impresión (igual que en Ventas)
+                        var iframe = document.getElementById('print_frame');
+                        iframe.src = request.print_url;
+                        iframe.onload = function () {
+                            iframe.contentWindow.focus();
+                            iframe.contentWindow.print();
+                            // Al cerrar el cuadro de impresión (imprimir o cancelar) se vuelve al listado
+                            iframe.contentWindow.onafterprint = function () {
+                                setTimeout(function () {
+                                    location.href = url_refresh;
+                                }, 500);
+                            };
+                        };
                     },
                     'cancel': function () {
                         location.href = url_refresh;

@@ -135,7 +135,7 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                         sale.expiration_date = (request.POST['expiration_date'])
                     else:
                         sale.expiration_date = None
-                    description = request.POST.get('description', '')
+                    description = request.POST.get('description', '').strip()[:500]
                     if description:
                         sale.description = description
                     sale.service_type = (request.POST['service_type'])

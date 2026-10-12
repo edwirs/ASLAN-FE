@@ -84,6 +84,14 @@
             object-fit: contain;
         }
 
+        .observations {
+            text-transform: none;
+            white-space: normal;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            margin-bottom: 5px;
+        }
+
         .dotted-separator {
             border: none !important;
             border-top: 1px dotted black !important;
@@ -196,6 +204,10 @@
         </tr>
         </tbody>
     </table>
+    {% if sale.description %}
+        <hr class="dotted-separator">
+        <p class="head-data observations"><b>Observaciones:</b><br>{{ sale.description|linebreaksbr }}</p>
+    {% endif %}
     <p class="text-center head-details">
         Elaborado por: ASLAN Tecnologia<br>
         Tel: 3002308365

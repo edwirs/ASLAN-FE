@@ -88,6 +88,10 @@
                     </div>
                 </div>
             </div>
+            <div class="col-lg-12 card border p-3 mt-3">
+                <label class="form-label fw-bold" for="buy_observations">Observaciones:</label>
+                {{ form.description }}
+            </div>
             <div class="col-lg-4 card border p-3 ms-auto">
                 <div class="mb-3">
                     <label class="form-label fw-bold">{{ form.total.label|upper }}</label>
@@ -206,6 +210,7 @@
             </form>
         </div>
     </div>
+    <iframe id="print_frame" style="display:none;"></iframe>
     <script src="{% static 'buy/admin/js/form.js' %}"></script>
     <script type="application/javascript">
         buy.detail.iva = {{ company.iva|safe }};
