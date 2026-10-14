@@ -380,3 +380,7 @@ body .input-group > .input-group-prepend + .form-control:not(:last-child) { bord
 /* Detalle de la venta normal: los campos con - y + (cantidad, precio) no se parten en dos líneas */
 #tblProducts .bootstrap-touchspin { flex-wrap: nowrap; }
 #tblProducts .bootstrap-touchspin input.form-control { min-width: 0; }
+
+/* Campos con - y + dentro de las tablas de detalle: botones más angostos para que quepa el número (p. ej. 1.987) */
+#tblProducts td .bootstrap-touchspin .btn { padding-left: .4rem; padding-right: .4rem; }
+#tblProducts td .bootstrap-touchspin input.form-control { padding-left: .3rem; padding-right: .3rem; text-align: center; }

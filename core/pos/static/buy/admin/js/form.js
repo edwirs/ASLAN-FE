@@ -68,7 +68,7 @@ var buy = {
             return v.id === product.id && (v.presentation_id || null) === (opt.presentation_id || null);
         })[0];
         if (existing) {
-            existing.cant += 1;
+            existing.cant = Math.round((parseFloat(existing.cant) + 1) * 1000) / 1000;
             this.listProducts();
             return;
         }
@@ -153,13 +153,20 @@ var buy = {
             rowCallback: function (row, data, index) {
                 var tr = $(row).closest('tr');
                 var stock = !data.is_service ? data.stock : 1000000;
+                // Productos que se compran por peso o fracciones (kilos, litros) admiten hasta 3 decimales: 1.987 = 1 kg y 987 g
                 tr.find('input[name="cant"]')
-                    .TouchSpin({
+                    .TouchSpin(data.allow_decimals ? {
+                        min: 0.001,
+                        max: 999999.999,
+                        step: 0.1,
+                        decimals: 3,
+                        forcestepdivisibility: 'none'   // no redondear 1.987 al múltiplo del paso
+                    } : {
                         min: 1,
                         max: Number.MAX_SAFE_INTEGER
                     })
                     .on('keypress', function (e) {
-                        return validate_text_box({'event': e, 'type': 'numbers'});
+                        return validate_text_box({'event': e, 'type': data.allow_decimals ? 'decimals' : 'numbers'});
                     });
                 tr.find('input[name="price"]')
                     .TouchSpin({
@@ -445,7 +452,12 @@ $(function () {
         .off()
         .on('change', 'input[name="cant"]', function () {
             var tr = tblProducts.cell($(this).closest('td, li')).index();
-            buy.detail.products[tr.row].cant = parseInt($(this).val());
+            var item = buy.detail.products[tr.row];
+            var typed = parseFloat(String($(this).val()).replace(',', '.'));
+            if (isNaN(typed) || typed <= 0) {
+                typed = item.allow_decimals ? 0.001 : 1;
+            }
+            item.cant = item.allow_decimals ? Math.round(typed * 1000) / 1000 : Math.max(parseInt(typed), 1);
             buy.calculateInvoice();
             $('td:last', tblProducts.row(tr.row).node()).html('$' + buy.detail.products[tr.row].total.toFixed(2));
         })

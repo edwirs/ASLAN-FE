@@ -90,8 +90,8 @@ var PosCart = (function () {
         tr.find('.input-qty').val(qty);
         var lineTotal = qty * parseFloat(tr.data('price'));
         if (tr.find('.input-price').length) {
-            // la columna Precio muestra el precio unitario editable; el subtotal solo aparece si hay varias unidades
-            tr.find('.price-display').text(qty > 1 ? '= ' + formatPrice(lineTotal) : '');
+            // la columna Precio muestra el precio unitario editable y, debajo, el total de la línea (siempre)
+            tr.find('.price-display').text('Total ' + formatPrice(lineTotal));
         } else {
             tr.find('.price-display').text(formatPrice(lineTotal));
         }
@@ -122,9 +122,9 @@ var PosCart = (function () {
         // Con permiso, la columna Precio es el precio unitario editable (no se agrega ningún campo más)
         var priceCell = canEditPrice() ?
             '<td><div class="d-flex align-items-start"><div>' +
-            '<input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm input-price" style="width:90px;" title="Editar precio de venta" value="' + opt.pvp + '">' +
-            '<small class="price-display text-muted d-block"></small></div>' +
-            '<button type="button" class="btn btn-sm btn-danger ms-2 btn-delete" title="Eliminar"><i class="fas fa-trash-alt"></i></button></div></td>' :
+            '<input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm input-price" style="width:80px;" title="Editar precio de venta" value="' + opt.pvp + '">' +
+            '<small class="price-display text-success fw-bold d-block mt-1" style="white-space:nowrap; font-size:.8rem;">Total ' + formatPrice(qty * opt.pvp) + '</small></div>' +
+            '<button type="button" class="btn btn-sm btn-danger ms-1 btn-delete" title="Eliminar"><i class="fas fa-trash-alt"></i></button></div></td>' :
             '<td><span class="price-display">' + formatPrice(qty * opt.pvp) + '</span>' +
             '<button type="button" class="btn btn-sm btn-danger ms-2 btn-delete" title="Eliminar"><i class="fas fa-trash-alt"></i></button></td>';
         var row = $(
@@ -134,7 +134,7 @@ var PosCart = (function () {
             ' data-own="' + (own ? 'true' : 'false') + '"' +
             ' data-service="' + (item.is_service ? 'true' : 'false') + '" data-unit="' + escapeHtml(own ? opt.name : item.unit) + '">' +
             '<td>' + label + '</td>' +
-            '<td style="width:' + (dec ? '110' : '80') + 'px;"><input type="number" class="form-control form-control-sm input-qty" value="' + qty + '" ' +
+            '<td style="width:' + (dec ? '100' : '70') + 'px;"><input type="number" class="form-control form-control-sm input-qty" value="' + qty + '" ' +
             (dec ? 'min="0.001" step="0.001" inputmode="decimal"' : 'min="1" step="1"') + '></td>' +
             priceCell +
             '</tr>'

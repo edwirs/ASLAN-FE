@@ -15,6 +15,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.generic import CreateView, DeleteView, FormView
 
 from core.pos.forms import *
+from core.pos.stock_lines import parse_quantity
 from core.pos.utilities import printer
 from core.reports.forms import ReportForm
 from core.security.mixins import GroupPermissionMixin
@@ -95,9 +96,8 @@ class BuyCreateView(GroupPermissionMixin, CreateView):
                         if pid not in products:
                             products[pid] = Product.objects.select_for_update().get(pk=pid)
                         product = products[pid]
-                        qty = int(i['cant'])
-                        if qty < 1:
-                            raise Exception(f"Cantidad inválida para '{product.name}'.")
+                        # Hasta 3 decimales, solo en productos que permiten cantidades decimales (1,987 kg)
+                        qty = parse_quantity(i['cant'], product)
                         presentation, factor = None, Decimal(1)
                         own = product.has_own_stock_variants()
                         if i.get('presentation_id'):

@@ -750,7 +750,7 @@ class Buy(models.Model):
             detail.price = float(detail.price)
             detail.iva = float(self.iva)
             detail.price_with_vat = detail.price + (detail.price * detail.iva)
-            detail.subtotal = detail.price * detail.cant
+            detail.subtotal = detail.price * float(detail.cant)
             detail.total_dscto = detail.subtotal * float(detail.dscto)
             detail.total_iva = (detail.subtotal - detail.total_dscto) * detail.iva
             detail.total = detail.subtotal - detail.total_dscto
@@ -790,7 +790,7 @@ class BuyDetail(models.Model):
     presentation_name = models.CharField(max_length=50, blank=True, default='')
     factor = models.DecimalField(max_digits=9, decimal_places=3, default=1)
     own_stock = models.BooleanField(default=False)  # True: subió el stock propio de la presentación
-    cant = models.IntegerField(default=0)
+    cant = models.DecimalField(max_digits=12, decimal_places=3, default=0)   # hasta 3 decimales (1,987 kg)
     price = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     price_with_vat = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     subtotal = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
@@ -816,6 +816,7 @@ class BuyDetail(models.Model):
         item = model_to_dict(self, exclude=['buy'])
         item['product'] = self.product.toJSON()
         item['factor'] = float(self.factor)
+        item['cant'] = float(self.cant)
         item['display_name'] = self.display_name()
         item['price'] = float(self.price)
         item['price_with_vat'] = float(self.price_with_vat)
