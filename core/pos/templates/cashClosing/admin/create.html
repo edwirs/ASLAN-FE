@@ -117,6 +117,28 @@ sidebar-collapse
                                 </strong>
                             </div>
 
+                            {% if receivable_sales %}
+                                <div class="cash-row">
+                                    <span class="text-muted">
+                                        Ventas a crédito (por cobrar, no incluidas)
+                                    </span>
+                                    <strong class="text-muted">
+                                        $ {{ receivable_sales }}
+                                    </strong>
+                                </div>
+                            {% endif %}
+
+                            {% if credit_payments %}
+                                <div class="cash-row">
+                                    <span class="text-muted">
+                                        Incluye abonos a créditos
+                                    </span>
+                                    <strong class="text-muted">
+                                        $ {{ credit_payments }}
+                                    </strong>
+                                </div>
+                            {% endif %}
+
                             <div class="cash-row">
                                 <span class="text-danger fw-bold">
                                     Egresos
@@ -130,7 +152,7 @@ sidebar-collapse
                             <div class="cash-row border-0 pt-4">
 
                                 <span class="fw-bold fs-5 text-dark">
-                                    Total ventas
+                                    Total ingresos
                                 </span>
 
                                 <strong class="fs-3 text-primary">

@@ -154,14 +154,15 @@
 
     <hr class="dotted-separator">
 
-    <div class="section-title">Ventas por medio de pago</div>
+    <div class="section-title">Ingresos por medio de pago</div>
     <table class="table table-borderless table-sm">
         <tbody>
         <tr><td>Efectivo</td><td class="amount">$ {{ closing.cash_sales|floatformat:0|intcomma }}</td></tr>
         <tr><td>Tarjeta crédito</td><td class="amount">$ {{ closing.credit_sales|floatformat:0|intcomma }}</td></tr>
         <tr><td>Tarjeta débito</td><td class="amount">$ {{ closing.debit_sales|floatformat:0|intcomma }}</td></tr>
         <tr><td>Transferencias</td><td class="amount">$ {{ closing.transfer_sales|floatformat:0|intcomma }}</td></tr>
-        <tr class="row-total"><td>Total ventas</td><td class="amount">$ {{ closing.total_sales|floatformat:0|intcomma }}</td></tr>
+        {% if closing.credit_payments %}<tr><td>Incluye abonos a créditos</td><td class="amount">$ {{ closing.credit_payments|floatformat:0|intcomma }}</td></tr>{% endif %}
+        <tr class="row-total"><td>Total ingresos</td><td class="amount">$ {{ closing.total_sales|floatformat:0|intcomma }}</td></tr>
         </tbody>
     </table>
 
@@ -171,7 +172,7 @@
     <table class="table table-borderless table-sm">
         <tbody>
         <tr><td>Base inicial</td><td class="amount">$ {{ closing.base_cash|floatformat:0|intcomma }}</td></tr>
-        <tr><td>(+) Ventas en efectivo</td><td class="amount">$ {{ closing.cash_sales|floatformat:0|intcomma }}</td></tr>
+        <tr><td>(+) Ingresos en efectivo</td><td class="amount">$ {{ closing.cash_sales|floatformat:0|intcomma }}</td></tr>
         <tr><td>(-) Gastos de caja</td><td class="amount">$ {{ closing.expenses|floatformat:0|intcomma }}</td></tr>
         <tr class="row-total"><td>Efectivo esperado</td><td class="amount">$ {{ closing.expected_cash|floatformat:0|intcomma }}</td></tr>
         <tr class="row-strong"><td>Efectivo contado</td><td class="amount">$ {{ closing.real_cash|floatformat:0|intcomma }}</td></tr>

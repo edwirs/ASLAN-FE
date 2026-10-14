@@ -876,6 +876,8 @@ class SaleCreditPayment(models.Model):
     transfermethods = models.CharField(max_length=50, choices=TRANSFERMETHODS, default=TRANSFERMETHODS[0][0], verbose_name='Tipo transferencia', null=True)
     total = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Valor pago')
     date_payment = models.DateField(default=datetime.now, verbose_name='Fecha de pago')
+    # Momento exacto en que se registró el abono (para el cierre de caja); los abonos anteriores quedan sin valor.
+    created_at = models.DateTimeField(auto_now_add=True, null=True, editable=False)
 
     def __str__(self):
         return f"{self.sale.client.get_full_name()}"
@@ -1266,6 +1268,8 @@ class CashClosing(models.Model):
     credit_sales = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     debit_sales = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     transfer_sales = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Abonos recibidos por ventas a crédito (ya incluidos en los valores por medio de pago y en el total)
+    credit_payments = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     expenses = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     expected_cash = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     base_cash = models.DecimalField(max_digits=9,decimal_places=2,default=0.00,verbose_name='Base Inicial')
@@ -1293,6 +1297,7 @@ class CashClosing(models.Model):
         item['credit_sales'] = float(self.credit_sales)
         item['debit_sales'] = float(self.debit_sales)
         item['transfer_sales'] = float(self.transfer_sales)
+        item['credit_payments'] = float(self.credit_payments)
         item['expenses'] = float(self.expenses)
         item['expected_cash'] = float(self.expected_cash)
         item['base_cash'] = float(self.base_cash)

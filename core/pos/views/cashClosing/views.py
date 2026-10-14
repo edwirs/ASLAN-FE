@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMixin
 from django.core.serializers.json import DjangoJSONEncoder
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -14,7 +14,7 @@ from django.urls import reverse_lazy
 from django.views.generic import CreateView, FormView, DetailView
 
 from core.pos.forms import CashClosingForm
-from core.pos.models import CashClosing, Company, Sale, Expenses
+from core.pos.models import CashClosing, Company, Sale, SaleCreditPayment, Expenses
 from core.reports.forms import ReportForm
 
 MODULE_NAME = 'Cierres de caja'
@@ -128,6 +128,58 @@ class CashClosingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateV
         return queryset
 
     # =====================================================
+    # QUERY ABONOS A CRÉDITOS
+    # =====================================================
+    def get_payments_queryset(self):
+        """Abonos recibidos desde el último cierre (el abono antiguo, sin hora, se ubica por su fecha de pago)."""
+        queryset = SaleCreditPayment.objects.all()
+        last_closing = self.get_last_closing()
+        if last_closing:
+            last_date = timezone.localtime(last_closing.created_at).date()
+            queryset = queryset.filter(
+                Q(created_at__gt=last_closing.created_at) |
+                Q(created_at__isnull=True, date_payment__gt=last_date)
+            )
+        return queryset
+
+    # =====================================================
+    # TOTALES DE VENTAS (un solo cálculo para la pantalla y para guardar el cierre)
+    # =====================================================
+    @staticmethod
+    def get_sales_totals(sales_queryset, payments_queryset=None):
+        """Lo cobrado en el período, por método de pago.
+
+        Las ventas a crédito (tipo de pago "Crédito") todavía no se han cobrado, así que no entran al
+        efectivo, a las tarjetas, a las transferencias ni al total; se informan aparte como "por cobrar".
+        Los abonos que se reciben por esos créditos sí son dinero que ingresa: se suman al método con que
+        se pagaron (un abono "mixto" no trae el desglose, así que se cuenta como transferencia).
+        """
+        zero = Decimal('0.00')
+        receivable = sales_queryset.filter(typemethods='credit')
+        paid = sales_queryset.exclude(typemethods='credit')
+        payments = payments_queryset if payments_queryset is not None else SaleCreditPayment.objects.none()
+
+        def total_of(queryset, field='total'):
+            return queryset.aggregate(result=Sum(field))['result'] or zero
+
+        mixto = paid.filter(paymentmethod='mixto')
+        credit_payments = total_of(payments)
+        return {
+            'total_sales': total_of(paid) + credit_payments,
+            'cash_sales': total_of(paid.filter(paymentmethod='cash')) + total_of(mixto, 'cash')
+                          + total_of(payments.filter(paymentmethod='cash')),
+            'credit_sales': total_of(paid.filter(paymentmethod='creditCard'))
+                            + total_of(payments.filter(paymentmethod='creditCard')),
+            'debit_sales': total_of(paid.filter(paymentmethod='debitCard'))
+                           + total_of(payments.filter(paymentmethod='debitCard')),
+            'transfer_sales': (total_of(paid.filter(paymentmethod='transfer'))
+                               + total_of(mixto, 'nequi_value') + total_of(mixto, 'daviplata_value')
+                               + total_of(payments.filter(paymentmethod__in=['transfer', 'mixto']))),
+            'credit_payments': credit_payments,
+            'receivable_sales': total_of(receivable),
+        }
+
+    # =====================================================
     # QUERY GASTOS
     # =====================================================
     def get_expenses_queryset(self):
@@ -178,10 +230,10 @@ class CashClosingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateV
                 # VALIDAR SI HAY VENTAS
                 # =====================================
 
-                if not sales_queryset.exists():
+                if not sales_queryset.exists() and not self.get_payments_queryset().exists():
 
                     data['error'] = (
-                        'No existen ventas pendientes '
+                        'No existen ventas ni abonos pendientes '
                         'para realizar un nuevo cierre'
                     )
 
@@ -191,58 +243,15 @@ class CashClosingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateV
                     )
 
                 # =====================================
-                # TOTALES VENTAS
+                # TOTALES VENTAS (las ventas a crédito aún no se cobran: no suman)
                 # =====================================
 
-                total_sales = sales_queryset.aggregate(
-                    result=Sum('total')
-                )['result'] or Decimal('0.00')
-
-                cash_sales = (
-                    sales_queryset.filter(
-                        paymentmethod='cash'
-                    ).aggregate(
-                        result=Sum('total')
-                    )['result'] or Decimal('0.00')
-                ) + (
-                    sales_queryset.filter(
-                        paymentmethod='mixto'
-                    ).aggregate(
-                        result=Sum('cash')
-                    )['result'] or Decimal('0.00')
-                )
-
-                credit_sales = sales_queryset.filter(
-                    paymentmethod='creditCard'
-                ).aggregate(
-                    result=Sum('total')
-                )['result'] or Decimal('0.00')
-
-                debit_sales = sales_queryset.filter(
-                    paymentmethod='debitCard'
-                ).aggregate(
-                    result=Sum('total')
-                )['result'] or Decimal('0.00')
-
-                transfer_sales = (
-                    sales_queryset.filter(
-                        paymentmethod='transfer'
-                    ).aggregate(
-                        result=Sum('total')
-                    )['result'] or Decimal('0.00')
-                ) + (
-                    sales_queryset.filter(
-                        paymentmethod='mixto'
-                    ).aggregate(
-                        result=Sum('nequi_value')
-                    )['result'] or Decimal('0.00')
-                ) + (
-                    sales_queryset.filter(
-                        paymentmethod='mixto'
-                    ).aggregate(
-                        result=Sum('daviplata_value')
-                    )['result'] or Decimal('0.00')
-                )
+                totals = self.get_sales_totals(sales_queryset, self.get_payments_queryset())
+                total_sales = totals['total_sales']
+                cash_sales = totals['cash_sales']
+                credit_sales = totals['credit_sales']
+                debit_sales = totals['debit_sales']
+                transfer_sales = totals['transfer_sales']
 
                 # =====================================
                 # GASTOS
@@ -300,6 +309,7 @@ class CashClosingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateV
                 cash_closing.credit_sales = credit_sales
                 cash_closing.debit_sales = debit_sales
                 cash_closing.transfer_sales = transfer_sales
+                cash_closing.credit_payments = totals['credit_payments']
 
                 cash_closing.expenses = expenses
 
@@ -345,58 +355,15 @@ class CashClosingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateV
         expenses_queryset = self.get_expenses_queryset()
 
         # =====================================
-        # TOTALES
+        # TOTALES (las ventas a crédito aún no se cobran: no suman)
         # =====================================
 
-        total_sales = sales_queryset.aggregate(
-            result=Sum('total')
-        )['result'] or Decimal('0.00')
-
-        cash_sales = (
-            sales_queryset.filter(
-                paymentmethod='cash'
-            ).aggregate(
-                result=Sum('total')
-            )['result'] or Decimal('0.00')
-        ) + (
-            sales_queryset.filter(
-                paymentmethod='mixto'
-            ).aggregate(
-                result=Sum('cash')
-            )['result'] or Decimal('0.00')
-        )
-
-        credit_sales = sales_queryset.filter(
-            paymentmethod='creditCard'
-        ).aggregate(
-            result=Sum('total')
-        )['result'] or Decimal('0.00')
-
-        debit_sales = sales_queryset.filter(
-            paymentmethod='debitCard'
-        ).aggregate(
-            result=Sum('total')
-        )['result'] or Decimal('0.00')
-
-        transfer_sales = (
-            sales_queryset.filter(
-                paymentmethod='transfer'
-            ).aggregate(
-                result=Sum('total')
-            )['result'] or Decimal('0.00')
-        ) + (
-            sales_queryset.filter(
-                paymentmethod='mixto'
-            ).aggregate(
-                result=Sum('nequi_value')
-            )['result'] or Decimal('0.00')
-        ) + (
-            sales_queryset.filter(
-                paymentmethod='mixto'
-            ).aggregate(
-                result=Sum('daviplata_value')
-            )['result'] or Decimal('0.00')
-        )
+        totals = self.get_sales_totals(sales_queryset, self.get_payments_queryset())
+        total_sales = totals['total_sales']
+        cash_sales = totals['cash_sales']
+        credit_sales = totals['credit_sales']
+        debit_sales = totals['debit_sales']
+        transfer_sales = totals['transfer_sales']
 
         expenses = expenses_queryset.aggregate(
             result=Sum('amount')
@@ -422,6 +389,8 @@ class CashClosingCreateView(LoginRequiredMixin, PermissionRequiredMixin, CreateV
         context['expenses'] = expenses
         context['total_sales'] = total_sales
         context['expected_cash'] = expected_cash
+        context['receivable_sales'] = totals['receivable_sales']
+        context['credit_payments'] = totals['credit_payments']
 
         return context
 
@@ -459,6 +428,7 @@ class CashClosingDetailView(
         context['credit_sales'] = obj.credit_sales
         context['debit_sales'] = obj.debit_sales
         context['transfer_sales'] = obj.transfer_sales
+        context['credit_payments'] = obj.credit_payments
 
         context['expenses'] = obj.expenses
         context['total_sales'] = obj.total_sales
