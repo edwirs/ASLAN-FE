@@ -526,16 +526,17 @@ $(function () {
         var args = {
             'params': params,
             'success': function (request) {
-                //dialog_action({
-                //    'content': '¿Desea imprimir la boleta de venta?',
-                //    'success': function () {
-                //        window.open(request.print_url, '_blank');
-                location.href = url_refresh;
-                //    },
-                //    'cancel': function () {
-                //        location.href = url_refresh;
-                //    }
-                //});
+                // La venta ya quedó guardada: se abre el cajón (sin imprimir) y luego se recarga la pantalla.
+                // Si el cajón falla (QZ Tray apagado, etc.) se da tiempo de leer el aviso antes de recargar.
+                var goBack = function () {
+                    location.href = url_refresh;
+                };
+                if (typeof CashDrawer === 'undefined') {
+                    return goBack();
+                }
+                CashDrawer.open('bar_auto').then(function (opened) {
+                    opened ? goBack() : setTimeout(goBack, 2500);
+                });
             }
         };
         submit_with_formdata(args);

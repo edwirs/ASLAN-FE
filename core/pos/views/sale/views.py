@@ -13,7 +13,6 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
 
 from core.pos.forms import *
-from core.pos.utilities import printer
 from core.reports.forms import ReportForm
 from core.pos.stock_lines import deduct_line, parse_quantity, resolve_lines
 from core.security.mixins import GroupPermissionMixin
@@ -141,9 +140,6 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                     sale.service_type = (request.POST['service_type'])
                     sale.propina = float(request.POST['propina'])
                     sale.save()
-                    # 🔥 ABRIR CAJÓN SOLO SI APLICA
-                    if sale.paymentmethod in ['cash', 'mixto']:
-                        printer.open_cash_drawer()
                     # El precio, el factor y el stock salen del catálogo (producto o presentación elegida);
                     # solo quien tiene permiso de editar precios puede cambiar el precio de la línea.
                     can_edit_price = request.user.has_perm('pos.edit_sale_price')

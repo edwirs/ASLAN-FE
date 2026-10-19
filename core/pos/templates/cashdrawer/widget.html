@@ -1,0 +1,48 @@
+{% load static %}
+{# Cajón monedero: botón de configuración + modal. La tecla F2 abre el cajón (ver pos/js/cash_drawer.js). #}
+<button type="button" id="btnCashDrawerConfig" class="btn btn-secondary btn-sm shadow"
+        style="position: fixed; right: 16px; bottom: 16px; z-index: 1040;"
+        title="Configurar el cajón monedero. La tecla F2 lo abre sin imprimir">
+    <i class="fas fa-cash-register"></i> Cajón (F2)
+</button>
+
+<div class="modal fade" id="modalCashDrawer" tabindex="-1" aria-hidden="true" style="z-index: 1080;">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-cash-register me-2"></i>Cajón monedero</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="cdStatus" class="alert alert-secondary py-2 small mb-3"></div>
+                <label class="form-label fw-bold" for="cdPrinter">Impresora donde está conectado el cajón</label>
+                <select id="cdPrinter" class="form-select mb-3"></select>
+                <label class="form-label fw-bold" for="cdPin">Conexión del cajón</label>
+                <select id="cdPin" class="form-select">
+                    <option value="0">Pin 2 (estándar)</option>
+                    <option value="1">Pin 5 (si el estándar no abre)</option>
+                </select>
+                <p class="small text-muted mt-3 mb-0">
+                    Se guarda solo en este computador. Requiere
+                    <a href="https://qz.io/download/" target="_blank" rel="noopener">QZ Tray</a>
+                    instalado y en ejecución.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-primary me-auto" id="cdTest">
+                    <i class="fas fa-vial"></i> Probar cajón
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="cdSave">
+                    <i class="fas fa-save"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{% static 'lib/qz-tray-2.3.0/qz-tray.js' %}"></script>
+<script src="{% static 'pos/js/cash_drawer.js' %}"></script>
+<script>
+    CashDrawer.init({source: '{{ source }}', logUrl: '{% url "cash_drawer_log" %}'});
+</script>

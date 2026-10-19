@@ -1544,3 +1544,19 @@ class FactusCredential(models.Model):
         verbose_name_plural = 'Credenciales de Factus'
         default_permissions = ()
         permissions = perms_for('pos.FactusCredential')
+
+
+class CashDrawerLog(models.Model):
+    user = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name='Usuario')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Fecha')
+    source = models.CharField(max_length=20, verbose_name='Pantalla')
+    printer = models.CharField(max_length=150, blank=True, default='', verbose_name='Impresora')
+
+    def __str__(self):
+        return f'{self.user} - {self.created_at:%Y-%m-%d %H:%M}'
+
+    class Meta:
+        verbose_name = 'Apertura de cajón'
+        verbose_name_plural = 'Aperturas de cajón'
+        ordering = ['-created_at']
+        default_permissions = ()

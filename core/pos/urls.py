@@ -27,6 +27,7 @@ from core.pos.views.order.views import *
 from core.pos.views.kitchen_order.views import *
 from core.pos.views.employee_transaction.views import *
 from core.pos.views.cashClosing.views import *
+from core.pos.views.cashdrawer.views import CashDrawerLogView
 
 urlpatterns = [
     # category
@@ -148,5 +149,7 @@ urlpatterns = [
     path('cashClosing/detail/<int:pk>/', CashClosingDetailView.as_view(), name='cashClosing_detail'),
     path('cashClosing/print/transaction/<int:pk>/', EmployeeTransactionPrintView.as_view(), name='cashClosing_print'),
     path('cashClosing/print/<int:pk>/', CashClosingPrintView.as_view(), name='cashClosing_print_ticket'),
+    # cajón monedero
+    path('cashdrawer/log/', CashDrawerLogView.as_view(), name='cash_drawer_log'),
     
 ]

@@ -51,7 +51,3 @@ def create_pdf(context, template_name):
         path_css = f'{settings.BASE_DIR}{settings.STATIC_URL}lib/bootstrap-5.0.2/css/bootstrap.min.css'
         pdf_file = HTML(string=html_template, base_url='.', url_fetcher=url_fetcher).write_pdf(stylesheets=[CSS(path_css)], presentational_hints=True)
     return pdf_file
-
-def open_cash_drawer():
-    with open(r'\\localhost\POSPrinter POS-80c', 'wb') as p:
-        p.write(b'\x1b\x70\x00\x19\xfa')
