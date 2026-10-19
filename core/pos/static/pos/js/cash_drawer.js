@@ -10,6 +10,8 @@ var CashDrawer = (function () {
     var MIN_INTERVAL_MS = 700;   // evita aperturas repetidas si la tecla queda presionada
 
     var logUrl = '';
+    var certUrl = '';
+    var signUrl = '';
     var source = '';
     var pending = null;   // apertura en curso
     var lastOpen = 0;
@@ -46,6 +48,38 @@ var CashDrawer = (function () {
             return 'No se encontró la impresora. Revise la configuración del cajón (botón "Cajón (F2)").';
         }
         return text || 'No se pudo abrir el cajón';
+    }
+
+    // Firma de las peticiones: QZ Tray exige identificar al sitio para poder "recordar" la autorización.
+    // El certificado público y la firma los entrega el servidor (la llave privada nunca sale de él).
+    function setupSigning() {
+        if (!certUrl || !signUrl || typeof qz === 'undefined') {
+            return;
+        }
+        qz.security.setCertificatePromise(function (resolve, reject) {
+            fetch(certUrl, {credentials: 'same-origin'}).then(function (r) {
+                return r.ok ? r.text() : Promise.reject(new Error('Certificado no disponible'));
+            }).then(resolve, function (err) {
+                console.warn('QZ Tray: se usará petición sin firmar.', err);
+                reject(err);   // sin certificado QZ trata la petición como anónima (pide permiso cada vez)
+            });
+        });
+        qz.security.setSignatureAlgorithm('SHA512');
+        qz.security.setSignaturePromise(function (toSign) {
+            return function (resolve, reject) {
+                fetch(signUrl, {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': csrfToken()},
+                    body: new URLSearchParams({request: toSign}),
+                    credentials: 'same-origin'
+                }).then(function (r) {
+                    return r.ok ? r.text() : Promise.reject(new Error('No se pudo firmar la solicitud'));
+                }).then(resolve, function (err) {
+                    console.warn('QZ Tray: no se pudo firmar la solicitud.', err);
+                    resolve();
+                });
+            };
+        });
     }
 
     function connect() {
@@ -175,6 +209,9 @@ var CashDrawer = (function () {
 
     function init(options) {
         logUrl = options.logUrl || '';
+        certUrl = options.certUrl || '';
+        signUrl = options.signUrl || '';
+        setupSigning();
         source = options.source || '';
         modal = new bootstrap.Modal($('modalCashDrawer'));
 

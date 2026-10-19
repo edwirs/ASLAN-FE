@@ -376,3 +376,6 @@ pyvenv.cfg
 pip-selfcheck.json
 
 # End of https://www.toptal.com/developers/gitignore/api/pycharm,venv,intellij,django
+
+# Llave privada para firmar peticiones a QZ Tray (cajón monedero)
+secrets/

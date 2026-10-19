@@ -249,3 +249,8 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 # https://docs.djangoproject.com/en/4.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Cajón monedero (QZ Tray): par llave privada / certificado con que el servidor firma las peticiones del navegador.
+# Se generan una sola vez con ``python manage.py generate_qz_cert``. La llave privada nunca se versiona (ver .gitignore).
+QZ_PRIVATE_KEY_PATH = env.str('QZ_PRIVATE_KEY_PATH', default=str(BASE_DIR / 'secrets' / 'qz' / 'private-key.pem'))
+QZ_CERTIFICATE_PATH = env.str('QZ_CERTIFICATE_PATH', default=str(BASE_DIR / 'secrets' / 'qz' / 'digital-certificate.txt'))

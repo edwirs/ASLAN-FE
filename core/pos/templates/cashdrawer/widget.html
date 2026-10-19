@@ -26,6 +26,7 @@
                     Se guarda solo en este computador. Requiere
                     <a href="https://qz.io/download/" target="_blank" rel="noopener">QZ Tray</a>
                     instalado y en ejecución.
+                    <a href="{% url 'cash_drawer_certificate' %}?download=1">Descargar certificado</a>
                 </p>
             </div>
             <div class="modal-footer">
@@ -44,5 +45,10 @@
 <script src="{% static 'lib/qz-tray-2.3.0/qz-tray.js' %}"></script>
 <script src="{% static 'pos/js/cash_drawer.js' %}"></script>
 <script>
-    CashDrawer.init({source: '{{ source }}', logUrl: '{% url "cash_drawer_log" %}'});
+    CashDrawer.init({
+        source: '{{ source }}',
+        logUrl: '{% url "cash_drawer_log" %}',
+        certUrl: '{% url "cash_drawer_certificate" %}',
+        signUrl: '{% url "cash_drawer_sign" %}'
+    });
 </script>
