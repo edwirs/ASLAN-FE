@@ -191,26 +191,10 @@ class SaleCreateView(GroupPermissionMixin, CreateView):
                 for i in Client.objects.filter(Q(names__icontains=term) | Q(dni__icontains=term)).order_by('names')[0:10]:
                     data.append(i.toJSON())
             elif action == 'create_client':
-                with transaction.atomic():
-                    form = ClientForm(self.request.POST)
-                    contacts_formset = ClientContactFormSet(self.request.POST)
-                    
-                    if form.is_valid() and contacts_formset.is_valid():
-                        client = form.save(commit=False)
-                        client.save()
-                        
-                        contacts_formset.instance = client
-                        contacts_formset.save()
-                        
-                        # Retornamos el objeto serializado del cliente recién creado
-                        data = client.toJSON()
-                    else:
-                        errors = {}
-                        if form.errors:
-                            errors.update(form.errors)
-                        if contacts_formset.errors:
-                            errors.update({'contacts': contacts_formset.errors})
-                        data['error'] = errors
+                # El modal de la venta solo captura los datos del cliente (sin contactos). ClientForm.save()
+                # ya valida y devuelve el cliente creado como JSON, o {'error': ...} si hay datos inválidos.
+                form = ClientForm(self.request.POST)
+                data = form.save()
             else:
                 data['error'] = 'No ha seleccionado ninguna opción'
         except Exception as e:

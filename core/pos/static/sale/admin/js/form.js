@@ -638,10 +638,6 @@ $(function () {
         submit_with_formdata(args);
     });
 
-    $('input[name="names"]')
-        .on('keypress', function (e) {
-            return validate_text_box({'event': e, 'type': 'letters'});
-        });
 
     $('input[name="dni"]')
         .on('keypress', function (e) {
