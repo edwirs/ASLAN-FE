@@ -1,20 +1,50 @@
 import json
-from django.contrib.auth.mixins import LoginRequiredMixin
+from decimal import Decimal, InvalidOperation
+from functools import wraps
+
+from django.db import transaction
 from django.db.models import Sum
 from django.http import HttpResponse, JsonResponse
+from django.utils import timezone
 from django.views.generic import FormView
 from django.views import View
 
-from core.pos.models import Sale, SaleCreditPayment
+from core.pos.choices import PAYMENTMETHODS, TRANSFERMETHODS
+from core.pos.models import CashClosing, Sale, SaleCreditPayment
 from core.pos.forms import *
+from core.pos.sale_deletion import SaleDeletionError, delete_sale
 from core.reports.forms import ReportForm
+from core.security.mixins import StrictPermissionMixin
 
 MODULE_NAME = 'Créditos Ventas'
+NO_PERMISSION = 'Su perfil no cuenta con el permiso necesario para realizar esta acción.'
 
 
-class SaleCreditReportView(LoginRequiredMixin, FormView):
+def require_permission(permission):
+    """Para las vistas de función del módulo: exige el permiso ``app.codename`` (responde JSON 403)."""
+    def decorator(view):
+        @wraps(view)
+        def wrapper(request, *args, **kwargs):
+            if not request.user.has_perm(permission):
+                return JsonResponse({'error': NO_PERMISSION}, status=403)
+            return view(request, *args, **kwargs)
+        return wrapper
+    return decorator
+
+
+def payment_is_closed(payment, last_closing):
+    """True si el abono ya quedó dentro de un cierre de caja (misma regla con que el cierre elige sus abonos)."""
+    if last_closing is None:
+        return False
+    if payment.created_at:
+        return payment.created_at <= last_closing.created_at
+    return payment.date_payment <= timezone.localtime(last_closing.created_at).date()
+
+
+class SaleCreditReportView(StrictPermissionMixin, FormView):
     template_name = 'credit/report.html'
     form_class = ReportForm
+    permission_required = 'pos.view_credit_report'
 
     def post(self, request, *args, **kwargs):
         action = request.POST['action']
@@ -63,6 +93,7 @@ class SaleCreditReportView(LoginRequiredMixin, FormView):
         return context
 
 
+@require_permission('pos.view_credit_report')
 def get_sale_credit(request, pk):
     try:
         sale = Sale.objects.get(pk=pk)
@@ -92,16 +123,19 @@ def get_sale_credit(request, pk):
     except Sale.DoesNotExist:
         return JsonResponse({'error': 'La venta no existe'}, status=404)
 
+@require_permission('pos.view_credit_report')
 def get_sale_payments(request, pk):
     try:
-        payments = SaleCreditPayment.objects.filter(sale_id=pk).order_by('-date_payment')
+        last_closing = CashClosing.objects.order_by('-id').first()
+        payments = SaleCreditPayment.objects.filter(sale_id=pk).order_by('-date_payment', '-id')
         data = [
             {
                 'id': p.id,
                 'date_payment': p.date_payment.strftime('%Y-%m-%d'),
                 'total': float(p.total),
-                'paymentmethod': str(p.paymentmethod) if p.paymentmethod else '',
-                'transfermethods': str(p.transfermethods) if p.transfermethods else '',
+                'paymentmethod': p.get_paymentmethod_display(),
+                'transfermethods': p.get_transfermethods_display() if p.paymentmethod == 'transfer' and p.transfermethods else '',
+                'closed': payment_is_closed(p, last_closing),
             }
             for p in payments
         ]
@@ -109,24 +143,69 @@ def get_sale_payments(request, pk):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-class SaleCreditAddPaymentView(View):
+
+class SaleCreditAddPaymentView(StrictPermissionMixin, View):
+    permission_required = 'pos.add_credit_payment'
+
     def post(self, request, *args, **kwargs):
         try:
-            sale_id = request.POST.get("sale_id")
-            total = request.POST.get("total")
             paymentmethod = request.POST.get("paymentmethod")
             transfermethods = request.POST.get("transfermethods")
+            if paymentmethod not in dict(PAYMENTMETHODS):
+                return JsonResponse({"error": "Seleccione un método de pago válido"})
+            if paymentmethod == 'transfer' and transfermethods and transfermethods not in dict(TRANSFERMETHODS):
+                return JsonResponse({"error": "Seleccione un método de transferencia válido"})
+            try:
+                total = Decimal(str(request.POST.get("total", "")).strip())
+            except InvalidOperation:
+                return JsonResponse({"error": "Ingrese un valor de pago válido"})
+            if total <= 0:
+                return JsonResponse({"error": "El valor del pago debe ser mayor a cero"})
 
-            sale = Sale.objects.get(pk=sale_id)
-
-            # Guardar el abono
-            payment = SaleCreditPayment.objects.create(
-                sale=sale,
-                total=total,
-                paymentmethod=paymentmethod,
-                transfermethods=transfermethods if transfermethods else None
-            )
-
+            with transaction.atomic():
+                # Se bloquea la venta para que dos abonos simultáneos no superen el saldo.
+                sale = Sale.objects.select_for_update().get(pk=request.POST.get("sale_id"), typemethods='credit')
+                paid = sale.salecreditpayment_set.aggregate(t=Sum('total'))['t'] or Decimal(0)
+                pending = sale.total - paid
+                if total > pending:
+                    return JsonResponse({"error": f"El abono no puede superar el saldo pendiente (${pending})"})
+                payment = SaleCreditPayment.objects.create(
+                    sale=sale,
+                    total=total,
+                    paymentmethod=paymentmethod,
+                    transfermethods=transfermethods if paymentmethod == 'transfer' and transfermethods else None
+                )
             return JsonResponse({"success": True, "payment": payment.toJSON()})
+        except Sale.DoesNotExist:
+            return JsonResponse({"error": "El crédito no existe"})
         except Exception as e:
             return JsonResponse({"error": str(e)})
+
+
+class SaleCreditPaymentDeleteView(StrictPermissionMixin, View):
+    """Elimina un abono: su valor deja de contarse como recaudo (el saldo del crédito vuelve a subir)."""
+    permission_required = 'pos.delete_credit_payment'
+
+    def post(self, request, pk, *args, **kwargs):
+        try:
+            payment = SaleCreditPayment.objects.get(pk=pk)
+        except SaleCreditPayment.DoesNotExist:
+            return JsonResponse({'error': 'El abono no existe o ya fue eliminado'})
+        payment.delete()
+        return JsonResponse({'success': True})
+
+
+class SaleCreditDeleteView(StrictPermissionMixin, View):
+    """Elimina el crédito = elimina la venta y devuelve el stock. No procede si aún tiene abonos."""
+    permission_required = 'pos.delete_credit'
+
+    def post(self, request, pk, *args, **kwargs):
+        if not Sale.objects.filter(pk=pk, typemethods='credit').exists():
+            return JsonResponse({'error': 'El crédito no existe o ya fue eliminado'})
+        try:
+            delete_sale(pk)
+        except SaleDeletionError as e:
+            return JsonResponse({'error': str(e)})
+        except Exception as e:
+            return JsonResponse({'error': str(e)})
+        return JsonResponse({'success': True})

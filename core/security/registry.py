@@ -130,6 +130,8 @@ PERMISSIONS = {
     'pos.SaleCreditPayment': [
         ('view_credit_report', 'Ver la cartera de créditos'),
         ('add_credit_payment', 'Registrar abonos a créditos'),
+        ('delete_credit_payment', 'Eliminar abonos de créditos'),
+        ('delete_credit', 'Eliminar créditos (elimina la venta y devuelve el stock)'),
     ],
 
     # Nómina
@@ -237,7 +239,7 @@ MENU = (
         Item('expenses', 'Gastos', 'expenses_list', 'pos.view_expenses',
              crud_q('pos', 'expenses')),
         Item('credits', 'Créditos', 'sale_credit_report', 'pos.view_credit_report',
-             q('pos', 'view_credit_report', 'add_credit_payment')),
+             q('pos', 'view_credit_report', 'add_credit_payment', 'delete_credit_payment', 'delete_credit')),
     )),
     Section('Nómina', 'fas fa-hand-holding-usd', (
         Item('employees', 'Empleados', 'employee_list', 'pos.view_employee',

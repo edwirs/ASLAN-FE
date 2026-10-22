@@ -146,9 +146,10 @@ var report = {
                     targets: [-1],
                     class: 'text-center',
                     render: function (data, type, row) {
-                        var buttons = '<a href="#" rel="myModalPayment" data-id="' + row.id + '" data-bs-toggle="tooltip" title="Agregar abono" class="btn btn-warning btn-sm"><i class="fas fa-money-check-dollar text-white"></i></a>';
-                        buttons += '<a href="' + pathname + 'delete/' + row.id + '/" data-bs-toggle="tooltip" title="Eliminar" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></a> ';
-
+                        var buttons = '<a href="#" rel="myModalPayment" data-id="' + row.id + '" data-bs-toggle="tooltip" title="Abonos" class="btn btn-warning btn-sm"><i class="fas fa-money-check-dollar text-white"></i></a> ';
+                        if (CAN_DELETE_CREDIT) {
+                            buttons += '<a href="#" rel="deleteCredit" data-id="' + row.id + '" data-bs-toggle="tooltip" title="Eliminar crédito" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></a>';
+                        }
                         return buttons;
                     }
                 },
@@ -182,10 +183,7 @@ $(function () {
                 type: 'GET',
                 dataType: 'json',
                 success: function (data) {
-                    console.log("Respuesta del servidor:", data);
                     if (!data.error) {
-                        let modalEl = $("#myModalPayment");
-                        console.log("¿Existe modal en DOM?:", modalEl.length);
                         // Cargar datos en el modal
                         $('#myModalPayment').data('sale-id', data.id);
                         $('#sale_id').val(data.id);
@@ -215,6 +213,72 @@ $(function () {
             });
         });
     
+    $('#tblReport tbody').on('click', 'a[rel="deleteCredit"]', function (e) {
+        e.preventDefault();
+        $('.tooltip').remove();
+        var id = $(this).data('id');
+        dialog_action({
+            'type': 'red',
+            'icon': 'fas fa-trash',
+            'content': '¿Desea eliminar el crédito de la factura N° ' + id + '? Se eliminará la venta completa y el stock de sus productos volverá al inventario. Si tiene abonos, primero debe eliminarlos.',
+            'success': function () {
+                $.ajax({
+                    url: pathname + 'admin/delete/' + id + '/',
+                    type: 'POST',
+                    headers: {'X-CSRFToken': csrftoken},
+                    dataType: 'json',
+                    success: function (response) {
+                        if (response.error) {
+                            return showError(response.error);
+                        }
+                        report.list(false);
+                    },
+                    error: function (xhr) {
+                        showError((xhr.responseJSON && xhr.responseJSON.error) || 'No se pudo eliminar el crédito');
+                    }
+                });
+            },
+            'cancel': function () {
+            }
+        });
+    });
+
+    // Eliminar un abono desde la ventana de abonos
+    $('#tblPayments tbody').on('click', 'a[rel="deletePayment"]', function (e) {
+        e.preventDefault();
+        var paymentId = $(this).data('id');
+        var closed = $(this).data('closed') === true || $(this).data('closed') === 'true';
+        var content = '¿Desea eliminar este abono? Su valor dejará de contarse como recaudo y el saldo del crédito aumentará.';
+        if (closed) {
+            content += '<br><br><b>Atención:</b> este abono ya hace parte de un cierre de caja realizado; ese cierre guardado no se modifica.';
+        }
+        dialog_action({
+            'type': 'red',
+            'icon': 'fas fa-trash',
+            'content': content,
+            'success': function () {
+                $.ajax({
+                    url: '/pos/credit/admin/delete_payment/' + paymentId + '/',
+                    type: 'POST',
+                    headers: {'X-CSRFToken': csrftoken},
+                    dataType: 'json',
+                    success: function (response) {
+                        if (response.error) {
+                            return showError(response.error);
+                        }
+                        refreshPaymentModal($('#sale_id').val());
+                        report.list(false);
+                    },
+                    error: function (xhr) {
+                        showError((xhr.responseJSON && xhr.responseJSON.error) || 'No se pudo eliminar el abono');
+                    }
+                });
+            },
+            'cancel': function () {
+            }
+        });
+    });
+
     $('#btnSaveEdit').on('click', function () {
         let saleId = $('#sale_id').val();
         let paymentTotal = $('#payment_total').val();
@@ -310,6 +374,31 @@ $(function () {
     });
 });
 
+// Aviso que se queda hasta que el usuario lo cierre (message_error se cierra solo a los 2 s).
+function showError(message) {
+    Swal.fire({icon: 'warning', title: 'No se pudo completar la acción', text: message, confirmButtonText: 'Entendido'});
+}
+
+function refreshPaymentModal(saleId) {
+    $.ajax({
+        url: '/pos/credit/admin/get_sale_credit/' + saleId + '/',
+        type: 'GET',
+        dataType: 'json',
+        success: function (data) {
+            if (data.error) {
+                return;
+            }
+            $('#saldo').val(data.pending);
+            if (parseFloat(data.pending) === 0) {
+                $('#cardAddPayment').hide();
+            } else {
+                $('#cardAddPayment').show();
+            }
+            loadPayments(saleId);
+        }
+    });
+}
+
 function loadPayments(saleId) {
     if ($.fn.DataTable.isDataTable('#tblPayments')) {
         $('#tblPayments').DataTable().destroy();
@@ -334,6 +423,14 @@ function loadPayments(saleId) {
             },
             {data: "paymentmethod"},
             {data: "transfermethods"},
+            {
+                data: "id",
+                className: 'text-center',
+                visible: CAN_DELETE_PAYMENT,
+                render: function (data, type, row) {
+                    return '<a href="#" rel="deletePayment" data-id="' + data + '" data-closed="' + row.closed + '" title="Eliminar abono" class="btn btn-danger btn-sm"><i class="fas fa-trash"></i></a>';
+                }
+            },
         ],
         paging: false,
         searching: false,

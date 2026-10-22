@@ -12,6 +12,10 @@
     <script src="{% static 'lib/bootstrap-daterangepicker-3.1/js/spanish.js' %}"></script>
     <script src="{% static 'lib/bootstrap-daterangepicker-3.1/js/daterangepicker.js' %}"></script>
     <link rel="stylesheet" href="{% static 'lib/bootstrap-daterangepicker-3.1/css/daterangepicker.css' %}"/>
+    <script>
+        var CAN_DELETE_CREDIT = {{ perms.pos.delete_credit|yesno:'true,false' }};
+        var CAN_DELETE_PAYMENT = {{ perms.pos.delete_credit_payment|yesno:'true,false' }};
+    </script>
     <script src="{% static 'credit/js/report.js' %}" type="text/javascript"></script>
 {% endblock %}
 
@@ -147,6 +151,7 @@
                                             <th>Monto</th>
                                             <th>Método de pago</th>
                                             <th>Método de transferencia</th>
+                                            <th class="text-center">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>

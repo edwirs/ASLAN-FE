@@ -106,6 +106,8 @@ urlpatterns = [
     path('credit/admin/get_sale_credit/<int:pk>/', get_sale_credit, name='get_sale_credit'),
     path('credit/admin/get_sale_payments/<int:pk>/', get_sale_payments, name='get_sale_payments'),
     path("credit/admin/add_payment/", SaleCreditAddPaymentView.as_view(), name="add_payment"),
+    path('credit/admin/delete_payment/<int:pk>/', SaleCreditPaymentDeleteView.as_view(), name='sale_credit_payment_delete'),
+    path('credit/admin/delete/<int:pk>/', SaleCreditDeleteView.as_view(), name='sale_credit_delete'),
     # empleados
     path('employee/', EmployeeListView.as_view(), name='employee_list'),
     path('employee/add/', EmployeeCreateView.as_view(), name='employee_create'),

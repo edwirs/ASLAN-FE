@@ -16,6 +16,7 @@ from django.views.decorators.clickjacking import xframe_options_exempt
 from django.conf import settings
 
 from core.pos.forms import *
+from core.pos.sale_deletion import delete_sale
 from core.pos.utilities import printer
 from core.reports.forms import ReportForm
 from core.pos.stock_lines import parse_quantity
@@ -415,8 +416,12 @@ class SaleFeDeleteView(GroupPermissionMixin, DeleteView):
 
     def post(self, request, *args, **kwargs):
         data = {}
+        # GroupPermissionMixin solo revisa el permiso al abrir la pantalla; aquí se exige también al eliminar.
+        if not request.user.has_perm('pos.delete_sale'):
+            return JsonResponse({'error': 'No tienes permiso para hacer esto'}, status=403)
         try:
-            self.get_object().delete()
+            # Devuelve el stock y no permite eliminar si hay abonos, notas crédito o factura ya enviada a Factus.
+            delete_sale(self.get_object().pk)
         except Exception as e:
             data['error'] = str(e)
         return HttpResponse(json.dumps(data), content_type='application/json')
