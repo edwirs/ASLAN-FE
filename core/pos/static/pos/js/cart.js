@@ -11,6 +11,7 @@ var PosCart = (function () {
     var chooserModal = null;
     var totalFilter = null;   // (bruto) -> total a pagar (p. ej. con descuento o cortesía)
     var payable = 0;
+    var focusQtyOnSelect = false;   // al elegir un producto, el cursor pasa al campo cantidad de su línea
 
     function formatPrice(value) {
         return value.toLocaleString('es-CO', {style: 'currency', currency: 'COP', minimumFractionDigits: 0});
@@ -109,6 +110,16 @@ var PosCart = (function () {
         $(document).trigger('poscart:changed', [payable, total]);
     }
 
+    // Deja el cursor en la cantidad de la línea (con el valor seleccionado, para escribir encima y cambiarlo ya).
+    function focusQty(row) {
+        if (!focusQtyOnSelect || !row || !row.length) {
+            return;
+        }
+        var input = row.find('.input-qty');
+        input.trigger('focus');
+        input[0].select();
+    }
+
     // item: {id, name, stock, is_service, unit, has_options}; opt: {presentation_id, name, factor, pvp, own_stock, stock}
     function appendRow(item, opt, qty) {
         var own = !!opt.own_stock;
@@ -143,6 +154,17 @@ var PosCart = (function () {
         row.find('.input-qty').on('change', function () {
             updateRow(row);
         });
+        if (focusQtyOnSelect) {
+            row.find('.input-qty').on('keydown', function (e) {
+                if (e.key !== 'Enter') {
+                    return;
+                }
+                // Enter dentro del formulario lo enviaría (guardar la venta): aquí solo confirma la cantidad.
+                e.preventDefault();
+                updateRow(row);
+                $('#search_barcode').trigger('focus');
+            });
+        }
         row.find('.input-price').on('input', function () {
             this.value = this.value.replace(/[^0-9.,]/g, '');
         }).on('change', function () {
@@ -178,15 +200,16 @@ var PosCart = (function () {
             var qtyInput = existing.find('.input-qty');
             qtyInput.val(round3((readQty(existing) || 0) + 1));
             updateRow(existing);
-            return;
+            return existing;
         }
         var minNeeded = item.allow_decimals ? 0.001 : 1;
         if (availableQty(item.id, opt.factor, rowStock, item.is_service, key, own, !!item.allow_decimals) < minNeeded) {
             stockAlert(own ? rowStock : Math.max(item.stock - cartUnitsFor(item.id, key), 0), item.unit);
-            return;
+            return null;
         }
-        appendRow(item, opt, 1);
+        var row = appendRow(item, opt, 1);
         updateTotal();
+        return row;
     }
 
     function showChooser(item, options) {
@@ -215,9 +238,15 @@ var PosCart = (function () {
                 '<span class="badge bg-success rounded-pill fs-6">' + formatPrice(opt.pvp) + '</span>'
             );
             btn.on('click', function () {
-                chooserModal.hide();
                 item.option = opt;
-                addToCart(item);
+                var row = addToCart(item);
+                if (row && focusQtyOnSelect) {
+                    // Bootstrap devuelve el foco al elemento previo al terminar de cerrar el modal: se espera a eso.
+                    document.getElementById('modalPresentations').addEventListener('hidden.bs.modal', function () {
+                        focusQty(row);
+                    }, {once: true});
+                }
+                chooserModal.hide();
             });
             list.append(btn);
         });
@@ -246,7 +275,9 @@ var PosCart = (function () {
     }
 
     return {
-        init: function () {
+        // options.focusQtyOnSelect: al elegir un producto, el cursor queda en su cantidad (Ventas Rápidas)
+        init: function (options) {
+            focusQtyOnSelect = !!(options && options.focusQtyOnSelect);
             productOptions = JSON.parse($('#product-options').text() || '{}');
             $(document).on('click', '.product_card', function () {
                 var info = cardItem($(this));
@@ -261,7 +292,7 @@ var PosCart = (function () {
                     return;
                 }
                 item.option = {presentation_id: null, name: item.unit, factor: 1, pvp: info.basePrice, own_stock: false};
-                addToCart(item);
+                focusQty(addToCart(item));
             });
         },
 

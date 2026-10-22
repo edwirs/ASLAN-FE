@@ -435,7 +435,7 @@ $(function () {
         });
 
     // Carrito (producto + presentación): compartido con los pedidos de mesa
-    PosCart.init();
+    PosCart.init({focusQtyOnSelect: true});
 
     // Detail products
 
