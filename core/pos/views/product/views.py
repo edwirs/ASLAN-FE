@@ -5,6 +5,8 @@ from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView, CreateView, UpdateView, TemplateView
 
+from core.pos import product_excel
+from core.pos.excel_views import ExcelExportView, ExcelImportView, ExcelTemplateView
 from core.pos.forms import ProductForm
 from core.pos.models import Product
 from core.pos.presentations import parse_presentations, sync_presentations
@@ -160,3 +162,20 @@ class ProductDeleteView(GroupPermissionMixin, DeleteView):
         context['list_url'] = self.success_url
         context['module_name'] = MODULE_NAME
         return context
+
+
+class ProductExportView(ExcelExportView):
+    permission_required = 'pos.extra_settings_product'
+    build = product_excel.build_export
+    file_prefix = 'productos'
+
+
+class ProductImportTemplateView(ExcelTemplateView):
+    permission_required = 'pos.extra_settings_product'
+    build = product_excel.build_template
+    file_name = 'plantilla_importar_productos.xlsx'
+
+
+class ProductImportView(ExcelImportView):
+    permission_required = 'pos.extra_settings_product'
+    run = product_excel.import_products

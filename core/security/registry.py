@@ -48,12 +48,15 @@ PERMISSIONS = {
     # Personas
     'pos.Client': crud('client', 'clientes') + [
         ('consult_dian_client', 'Consultar clientes en la DIAN'),
+        ('extra_settings_client', 'Configuraciones adicionales de clientes (importar y exportar Excel)'),
     ],
     'pos.Provider': crud('provider', 'proveedores'),
 
     # Bodega
     'pos.Category': crud('category', 'categorías'),
-    'pos.Product': crud('product', 'productos'),
+    'pos.Product': crud('product', 'productos') + [
+        ('extra_settings_product', 'Configuraciones adicionales de productos (importar y exportar Excel)'),
+    ],
     'pos.ProductAutoAdd': crud('productautoadd', 'productos con descuento'),
 
     # Facturas
@@ -196,7 +199,7 @@ class Section:
 MENU = (
     Section('Personas', 'fas fa-users', (
         Item('clients', 'Clientes', 'client_list', 'pos.view_client',
-             crud_q('pos', 'client') + q('pos', 'consult_dian_client')),
+             crud_q('pos', 'client') + q('pos', 'consult_dian_client', 'extra_settings_client')),
         Item('providers', 'Proveedores', 'provider_list', 'pos.view_provider',
              crud_q('pos', 'provider')),
     )),
@@ -204,7 +207,7 @@ MENU = (
         Item('categories', 'Categorías', 'category_list', 'pos.view_category',
              crud_q('pos', 'category')),
         Item('products', 'Productos', 'product_list', 'pos.view_product',
-             crud_q('pos', 'product')),
+             crud_q('pos', 'product') + q('pos', 'extra_settings_product')),
         Item('productautoadd', 'Productos descuento', 'productautoadd_list', 'pos.view_productautoadd',
              crud_q('pos', 'productautoadd')),
     )),

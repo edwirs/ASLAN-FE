@@ -2,6 +2,13 @@
 {% load static %}
 {% block assets_list %}
     <script src="{% static 'product/js/list.js' %}"></script>
+    <script src="{% static 'js/excel_tools.js' %}"></script>
+{% endblock %}
+
+{% block header_extra %}
+    {% if perms.pos.extra_settings_product %}
+        {% include 'partials/excel_tools_button.html' %}
+    {% endif %}
 {% endblock %}
 
 {% block columns %}
@@ -15,5 +22,10 @@
 {% endblock %}
 
 {% block javascript_list %}
-
+    {% if perms.pos.extra_settings_product %}
+        {% url 'product_export' as export_url %}
+        {% url 'product_import' as import_url %}
+        {% url 'product_import_template' as template_url %}
+        {% include 'partials/excel_tools_panel.html' with plural='productos' export_url=export_url import_url=import_url template_url=template_url import_note='Los productos se crean con stock 0; puede marcar cada fila como producto o servicio. La categoría debe existir.' %}
+    {% endif %}
 {% endblock %}

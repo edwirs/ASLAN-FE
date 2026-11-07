@@ -5,6 +5,8 @@ from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView, CreateView, UpdateView, TemplateView
 
+from core.pos import client_excel
+from core.pos.excel_views import ExcelExportView, ExcelImportView, ExcelTemplateView
 from core.pos.forms import ClientForm, ClientContactFormSet
 from core.pos.models import Client, DocumentType
 from core.security.mixins import GroupPermissionMixin
@@ -188,3 +190,20 @@ class ClientDeleteView(GroupPermissionMixin, DeleteView):
         context['list_url'] = self.success_url
         context['module_name'] = MODULE_NAME
         return context
+
+
+class ClientExportView(ExcelExportView):
+    permission_required = 'pos.extra_settings_client'
+    build = client_excel.build_export
+    file_prefix = 'clientes'
+
+
+class ClientImportTemplateView(ExcelTemplateView):
+    permission_required = 'pos.extra_settings_client'
+    build = client_excel.build_template
+    file_name = 'plantilla_importar_clientes.xlsx'
+
+
+class ClientImportView(ExcelImportView):
+    permission_required = 'pos.extra_settings_client'
+    run = client_excel.import_clients

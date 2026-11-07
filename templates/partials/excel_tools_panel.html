@@ -1,0 +1,63 @@
+{# Panel lateral derecho (exportar / importar Excel) y ventana de importación. Lo maneja static/js/excel_tools.js.
+   Se dibuja solo para quien tiene el permiso de «Configuraciones adicionales» del módulo (lo decide la pantalla que lo
+   incluye). Parámetros: plural ("clientes"), export_url, import_url, template_url, import_note. #}
+<div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasExcelTools" aria-labelledby="offcanvasExcelToolsLabel"
+     style="--bs-offcanvas-width: 300px;">
+    <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title fw-bold" id="offcanvasExcelToolsLabel">
+            <i class="fas fa-cog"></i> Configuraciones adicionales
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+    <div class="offcanvas-body">
+        <div class="d-grid gap-2">
+            <a href="{{ export_url }}" class="btn btn-outline-success text-start" id="btnExcelExport">
+                <i class="fas fa-file-excel"></i> Exportar {{ plural }} a Excel
+            </a>
+            <button type="button" class="btn btn-outline-primary text-start" id="btnExcelOpenImport">
+                <i class="fas fa-file-import"></i> Importar {{ plural }} desde Excel
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalExcelImport" tabindex="-1" aria-labelledby="modalExcelImportLabel" aria-hidden="true"
+     data-import-url="{{ import_url }}" data-entity="{{ plural }}">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="modalExcelImportLabel">
+                    <i class="fas fa-file-import"></i> Importar {{ plural }} desde Excel
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-4">
+                    <div class="fw-bold mb-1">1. Descargue la plantilla</div>
+                    <p class="text-muted small mb-2">
+                        Llénela con sus {{ plural }} (una fila por registro). {{ import_note }}
+                        Las instrucciones están en su hoja «Instrucciones».
+                    </p>
+                    <a href="{{ template_url }}" class="btn btn-outline-success">
+                        <i class="fas fa-download"></i> Descargar plantilla
+                    </a>
+                </div>
+                <hr>
+                <div class="mb-3">
+                    <label for="importFile" class="form-label fw-bold">2. Seleccione el archivo a importar</label>
+                    <input type="file" class="form-control" id="importFile"
+                           accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+                    <div class="form-text">Solo archivos de Excel (.xlsx o .xls), de máximo 5 MB.</div>
+                    <div class="text-danger small mt-1" id="importFileError" hidden></div>
+                </div>
+                <div id="importResult" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary" id="btnImportRun" disabled>
+                    <i class="fas fa-upload"></i> Importar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>

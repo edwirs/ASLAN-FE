@@ -40,6 +40,9 @@ urlpatterns = [
     path('product/add/', ProductCreateView.as_view(), name='product_create'),
     path('product/update/<int:pk>/', ProductUpdateView.as_view(), name='product_update'),
     path('product/delete/<int:pk>/', ProductDeleteView.as_view(), name='product_delete'),
+    path('product/export/', ProductExportView.as_view(), name='product_export'),
+    path('product/import/', ProductImportView.as_view(), name='product_import'),
+    path('product/import/template/', ProductImportTemplateView.as_view(), name='product_import_template'),
     # company
     path('company/update/', CompanyUpdateView.as_view(), name='company_update'),
     # credenciales factus
@@ -53,6 +56,9 @@ urlpatterns = [
     path('client/update/<int:pk>/', ClientUpdateView.as_view(), name='client_update'),
     path('client/delete/<int:pk>/', ClientDeleteView.as_view(), name='client_delete'),
     path('client/consult_dian/', consult_dian_acquirer, name='client_consult_dian'),
+    path('client/export/', ClientExportView.as_view(), name='client_export'),
+    path('client/import/', ClientImportView.as_view(), name='client_import'),
+    path('client/import/template/', ClientImportTemplateView.as_view(), name='client_import_template'),
     # provider
     path('provider/', ProviderListView.as_view(), name='provider_list'),
     path('provider/add/', ProviderCreateView.as_view(), name='provider_create'),
