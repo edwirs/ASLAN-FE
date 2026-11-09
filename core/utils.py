@@ -42,7 +42,7 @@ def insert_data():
             print(f'record inserted product {product.id}')
 
     category = Category.objects.create(name='SERVICIOS')
-    Product(name='FORMATEO DE COMPUTADORAS', category=category, is_service=True, with_tax=False, pvp=15.00, code='FORMATEO85451').save()
+    Product(name='FORMATEO DE COMPUTADORAS', category=category, is_service=True, tax='iva_excluido', pvp=15.00, code='FORMATEO85451').save()
 
     client = Client()
     client.names = 'Consumidor Final'

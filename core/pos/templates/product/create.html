@@ -11,57 +11,162 @@
 {% endblock %}
 
 {% block form_fields %}
-<style>.mode-option.active { border-color: #17a2b8; background: #e8f7fa; }</style>
+<style>
+    .mode-option.active { border-color: #17a2b8; background: #e8f7fa; }
+    .prod-section .card-header { background: transparent; }
+    .prod-section .card-title i { width: 22px; text-align: center; color: #17a2b8; }
+    .prod-switch { border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .5rem; padding: .75rem 1rem; height: 100%; }
+    .prod-switch small { display: block; }
+    #retentions_display { cursor: pointer; }
+    #retentions_table td { vertical-align: middle; }
+</style>
 <div class="row g-3">
-    <div class="col-md-12 col-lg-12">
-        <label class="form-label fw-bold">{{ form.name.label }}</label>
-        {{ form.name }}
-    </div>
-    <div class="col-md-6 col-lg-4">
-        <label class="form-label fw-bold">{{ form.code.label }}</label>
-        {{ form.code }}
-    </div>
-    <div class="col-md-6 col-lg-4">
-        <label class="form-label fw-bold">{{ form.barcode.label }}</label>
-        {{ form.barcode }}
-    </div>
-    <div class="col-md-6 col-lg-4">
-        <label class="form-label fw-bold">{{ form.category.label }}</label>
-        {{ form.category }}
-    </div>
-    <div class="col-md-12 col-lg-12">
-        <label class="form-label fw-bold">{{ form.description.label }}</label>
-        {{ form.description }}
+
+    <!-- Información general -->
+    <div class="col-12">
+        <div class="card card-outline card-info mb-0 prod-section">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title mb-0"><i class="fas fa-tag"></i> Información general</h3>
+                <div class="form-check form-switch mb-0 d-flex align-items-center gap-2 ms-auto">
+                    {{ form.is_active }}
+                    <label class="form-check-label fw-bold mb-0" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-lg-8">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-bold">{{ form.name.label }}</label>
+                                {{ form.name }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">{{ form.code.label }}</label>
+                                {{ form.code }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">{{ form.barcode.label }}</label>
+                                {{ form.barcode }}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold">{{ form.category.label }}</label>
+                                {{ form.category }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-lg-4">
+                        <label class="form-label fw-bold">Imagen del producto <small class="text-muted fw-normal">(opcional)</small></label>
+                        <div class="d-flex align-items-center gap-3 flex-wrap">
+                            <div id="image_preview" class="border rounded d-flex align-items-center justify-content-center bg-light"
+                                 style="width: 96px; height: 96px; overflow: hidden;">
+                                {% if form.instance.image %}
+                                    <img src="{{ form.instance.get_image }}" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                                {% else %}
+                                    <i class="fas fa-box fa-2x text-muted"></i>
+                                {% endif %}
+                            </div>
+                            <div style="min-width: 160px; flex: 1;">
+                                <input type="file" name="image" id="id_image" class="form-control" accept="image/jpeg,image/png,image/webp">
+                                <small class="text-muted d-block mt-1">
+                                    JPG, PNG o WebP, de máximo 2 MB. Se reduce automáticamente a 400 px para que las ventas carguen rápido.
+                                </small>
+                                {% if form.instance.image %}
+                                    <div class="form-check mt-1">
+                                        <input class="form-check-input" type="checkbox" name="image-clear" id="image-clear">
+                                        <label class="form-check-label" for="image-clear">Quitar la imagen actual</label>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-bold">{{ form.description.label }}</label>
+                        {{ form.description }}
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
-    <div class="row mb-4" style="margin-top: 20px;">
-        <div class="col-md-6 col-lg-4 mb-3" id="price">
-            <label class="form-label fw-bold price">{{ form.price.label }}</label>
-            {{ form.price }}
-        </div>
-        <div class="col-md-6 col-lg-4 mb-3">
-            <label class="form-label fw-bold">{{ form.pvp.label }}</label>
-            {{ form.pvp }}
-        </div>
-        <div class="col-md-6 col-lg-4 mb-3" id="stock">
-            <label class="form-label fw-bold stock">{{ form.stock.label }} <small class="text-muted fw-normal base-hint">(en unidad base)</small></label>
-            {{ form.stock }}
-        </div>
-        <div class="col-md-6 col-lg-4 mb-3">
-            <label class="form-label fw-bold">{{ form.unit_name.label }}</label>
-            {{ form.unit_name }}
-            <input type="text" name="unit_name_other" id="unit_name_other" class="form-control mt-2" maxlength="30"
-                   placeholder="Escriba la unidad (Ej: Racimo)" style="display: none;" autocomplete="off">
-            <small class="text-muted">El precio y el stock de arriba son de esta unidad. Si no está en la lista, elija «Otra…».</small>
-        </div>
-        <div class="col-md-6 col-lg-4 mb-3" id="min_stock">
-            <label class="form-label fw-bold">{{ form.min_stock.label }} <small class="text-muted fw-normal">(opcional)</small></label>
-            {{ form.min_stock }}
-            <small class="text-muted">Los reportes de inventario avisan cuando el stock llegue a este nivel. Déjelo vacío si no lo necesita. En productos con stock por variante se aplica a cada variante.</small>
+    <!-- Inventario -->
+    <div class="col-12">
+        <div class="card card-outline card-info mb-0 prod-section">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h3 class="card-title mb-0"><i class="fas fa-warehouse"></i> Inventario y unidad de medida</h3>
+                <div class="form-check form-switch mb-0 d-flex align-items-center gap-2 ms-auto">
+                    {{ form.is_service }}
+                    <label class="form-check-label fw-bold mb-0" for="{{ form.is_service.id_for_label }}"
+                           title="Los servicios no descuentan stock al vender ni usan precio de compra.">{{ form.is_service.label }}</label>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6 col-lg-4">
+                        <label class="form-label fw-bold">{{ form.unit_name.label }}</label>
+                        {{ form.unit_name }}
+                        <input type="text" name="unit_name_other" id="unit_name_other" class="form-control mt-2" maxlength="30"
+                               placeholder="Escriba la unidad (Ej: Racimo)" style="display: none;" autocomplete="off">
+                        <small class="text-muted">El precio y el stock son de esta unidad. Si no está en la lista, elija «Otra…».</small>
+                    </div>
+                    <div class="col-md-6 col-lg-4" id="stock">
+                        <label class="form-label fw-bold stock">{{ form.stock.label }} <small class="text-muted fw-normal base-hint">(en unidad base)</small></label>
+                        {{ form.stock }}
+                    </div>
+                    <div class="col-md-6 col-lg-4" id="min_stock">
+                        <label class="form-label fw-bold">{{ form.min_stock.label }} <small class="text-muted fw-normal">(opcional)</small></label>
+                        {{ form.min_stock }}
+                        <small class="text-muted">Los reportes de inventario avisan cuando el stock llegue a este nivel. Déjelo vacío si no lo necesita. En productos con stock por variante se aplica a cada variante.</small>
+                    </div>
+                    <div class="col-12" id="allow_decimals_row">
+                        <div class="prod-switch d-flex justify-content-between align-items-start gap-3">
+                            <label class="form-check-label mb-0" for="{{ form.allow_decimals.id_for_label }}">
+                                <b>{{ form.allow_decimals.label }}</b>
+                                <small class="text-muted">Para productos que se venden por peso o fracciones (kilos, litros): admite cantidades como 0,295</small>
+                                <small class="text-info" id="decimals_hint" style="display: none !important;"></small>
+                            </label>
+                            <div class="form-check form-switch mb-0">{{ form.allow_decimals }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="col-12 mb-4">
+    <!-- Precios e impuestos -->
+    <div class="col-12">
+        <div class="card card-outline card-info mb-0 prod-section">
+            <div class="card-header"><h3 class="card-title mb-0"><i class="fas fa-dollar-sign"></i> Precios e impuestos</h3></div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6 col-lg-3" id="price">
+                        <label class="form-label fw-bold price">{{ form.price.label }}</label>
+                        {{ form.price }}
+                    </div>
+                    <div class="col-md-6 col-lg-3 price-field">
+                        <label class="form-label fw-bold">{{ form.pvp.label }}</label>
+                        {{ form.pvp }}
+                    </div>
+                    <div class="col-md-6 col-lg-3 price-field">
+                        <label class="form-label fw-bold" for="{{ form.tax.id_for_label }}">{{ form.tax.label }}</label>
+                        {{ form.tax }}
+                    </div>
+                    <div class="col-md-6 col-lg-3 price-field">
+                        <label class="form-label fw-bold" for="retentions_display">Retenciones</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="retentions_display" readonly placeholder="Sin retenciones"
+                                   autocomplete="off" title="Haga clic para agregar o quitar retenciones">
+                            <button type="button" class="btn btn-outline-secondary" id="btn_retentions" title="Agregar retenciones">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        {{ form.retentions }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
         <div class="card card-outline card-info mb-0" id="presentations_card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h3 class="card-title mb-0"><i class="fas fa-boxes-stacked"></i> Presentaciones</h3>
@@ -143,67 +248,49 @@
         {{ presentations|json_script:"presentations-data" }}
     </div>
     
-    <div class="mb-4">
-        <!-- SWITCHES -->
-        <div class="col-md-4 d-flex justify-content-between align-items-center">
-            <label class="form-check-label fw-bold me-2 mb-0" for="{{ form.is_service.id_for_label }}">
-                {{ form.is_service.label }}
-            </label>
-            <div class="form-check form-switch mb-0">
-                {{ form.is_service }}
-            </div>
-        </div>
-        <div class="col-md-4 d-flex justify-content-between align-items-center" id="allow_decimals_row">
-            <label class="form-check-label fw-bold me-2 mb-0" for="{{ form.allow_decimals.id_for_label }}">
-                {{ form.allow_decimals.label }}
-                <small class="text-muted fw-normal d-block">Para productos que se venden por peso o fracciones (kilos, litros): admite cantidades como 0,295</small>
-                <small class="text-info fw-normal d-block" id="decimals_hint" style="display: none !important;"></small>
-            </label>
-            <div class="form-check form-switch mb-0">
-                {{ form.allow_decimals }}
-            </div>
-        </div>
-        <div class="col-md-4 d-flex justify-content-between align-items-center">
-            <label class="form-check-label fw-bold me-2 mb-0" for="{{ form.with_tax.id_for_label }}">{{ form.with_tax.label }}</label>
-            <div class="form-check form-switch mb-0">
-                {{ form.with_tax }}
-            </div>
-        </div>
-        <div class="col-md-4 d-flex justify-content-between align-items-center">
-            <label class="form-check-label fw-bold me-2 mb-0" for="{{ form.is_active.id_for_label }}">{{ form.is_active.label }}</label>
-            <div class="form-check form-switch mb-0">
-                {{ form.is_active }}
-            </div>
-        </div>
-    </div>
-
-    <div class="col-12">
-        <label class="form-label fw-bold">Imagen del producto <small class="text-muted fw-normal">(opcional)</small></label>
-        <div class="d-flex align-items-center gap-3 flex-wrap">
-            <div id="image_preview" class="border rounded d-flex align-items-center justify-content-center bg-light"
-                 style="width: 96px; height: 96px; overflow: hidden;">
-                {% if form.instance.image %}
-                    <img src="{{ form.instance.get_image }}" alt="" style="max-width: 100%; max-height: 100%; object-fit: contain;">
-                {% else %}
-                    <i class="fas fa-box fa-2x text-muted"></i>
-                {% endif %}
-            </div>
-            <div style="min-width: 260px; flex: 1;">
-                <input type="file" name="image" id="id_image" class="form-control" accept="image/jpeg,image/png,image/webp">
-                <small class="text-muted d-block mt-1">
-                    JPG, PNG o WebP, de máximo 2 MB. Se reduce automáticamente a 400 px para que las ventas carguen rápido.
-                </small>
-                {% if form.instance.image %}
-                    <div class="form-check mt-1">
-                        <input class="form-check-input" type="checkbox" name="image-clear" id="image-clear">
-                        <label class="form-check-label" for="image-clear">Quitar la imagen actual</label>
-                    </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
 </div>
 
-
-
+{% endblock %}
+{% block content_form_before %}
+    {{ block.super }}
+    {{ retention_catalog|json_script:"retention-catalog" }}
+    <div class="modal fade" id="modalRetentions" tabindex="-1" aria-labelledby="modalRetentionsTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalRetentionsTitle">Retenciones</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3 align-items-end">
+                        <div class="col-md-5">
+                            <label class="form-label fw-bold" for="ret_type">Retención</label>
+                            <select class="form-select" id="ret_type"></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold" for="ret_rate">Porcentaje (%)</label>
+                            <select class="form-select" id="ret_rate" disabled></select>
+                        </div>
+                        <div class="col-md-3 d-grid">
+                            <button type="button" class="btn btn-primary" id="ret_add"><i class="fas fa-plus"></i> Agregar</button>
+                        </div>
+                    </div>
+                    <div class="alert alert-warning py-2 mt-3 mb-0" id="ret_warning" style="display:none;"></div>
+                    <hr>
+                    <h6 class="fw-bold">Retenciones agregadas</h6>
+                    <p class="text-center text-muted my-3" id="ret_empty">No se encontraron retenciones</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0" id="retentions_table" style="display:none;">
+                            <thead><tr class="text-muted small text-uppercase"><th>Retención</th><th class="text-end">Porcentaje</th><th style="width:50px"></th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" id="ret_accept">Aceptar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 {% endblock %}

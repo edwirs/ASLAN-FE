@@ -62,20 +62,25 @@ $(function () {
             return validate_text_box({'event': e, 'type': 'decimals'});
         });
     
+    // Un servicio no maneja inventario: se ocultan precio de compra, stock, stock mínimo y «permite decimales».
     function toggleFields() {
-        if (input_is_service.prop('checked')) {
-            $('#price, #stock, #min_stock').hide(); // Oculta los divs con los inputs
-        } else {
-            $('#price, #stock, #min_stock').show(); // Muestra los divs
-        }
+        var service = input_is_service.prop('checked');
+        $('#price, #stock, #min_stock, #allow_decimals_row').toggle(!service);
+        // Sin el precio de compra quedan 3 campos (venta, impuesto, retenciones): se reparten todo el ancho, 1/3 cada uno
+        $('.price-field').toggleClass('col-md-6 col-lg-3', !service).toggleClass('col-md-4 col-lg-4', service);
     }
 
     // Ejecutar al cargar la página
     toggleFields();
 
     // Ejecutar cuando se cambia el switch
-    input_is_service.on('change', function () {
+    input_is_service.on('change', function (e) {
         toggleFields();
+        // Al marcarlo a mano, «permite decimales» queda apagado para no dejar un valor oculto sin que se note.
+        // (Al cargar la página no se toca: un servicio guardado con ese valor lo conserva.)
+        if (!e.isTrigger && input_is_service.prop('checked')) {
+            $allowDecimals.prop('checked', false).trigger('change');
+        }
     });
 
     input_is_service.trigger('change');
@@ -310,4 +315,132 @@ $(function () {
         $preview.html('<img src="' + url + '" alt="" style="max-width:100%;max-height:100%;object-fit:contain;">');
         $('#image-clear').prop('checked', false);
     });
+});
+
+
+// ---- Retenciones: campo de solo lectura + ventana para agregarlas ---------------------------------------
+// El valor real vive en el campo oculto «retentions» como lista JSON de textos «código:tarifa» (p. ej. "06:0.50").
+// El campo visible solo muestra las tarifas separadas por coma ("0.50, 1.50").
+var retentions = {
+    catalog: {types: [], rates: {}},
+    names: {},
+    $hidden: null,
+    $display: null,
+    modal: null,
+    draft: [],
+
+    esc: function (v) { return $('<div>').text(v === null || v === undefined ? '' : v).html(); },
+
+    parse: function (raw) {
+        try {
+            var list = JSON.parse(raw || '[]');
+            return Array.isArray(list) ? list.filter(function (i) { return typeof i === 'string' && i.indexOf(':') > 0; }) : [];
+        } catch (e) {
+            return [];
+        }
+    },
+
+    rate: function (item) { return item.split(':')[1]; },
+
+    refreshDisplay: function (list) {
+        var self = this;
+        var text = list.map(function (i) { return self.rate(i); }).join(', ');
+        this.$display.val(text).attr('title', list.length
+            ? list.map(function (i) { return self.names[i.split(':')[0]] + ' ' + self.rate(i) + '%'; }).join(' · ')
+            : 'Haga clic para agregar o quitar retenciones');
+    },
+
+    save: function (list) {
+        this.$hidden.val(JSON.stringify(list));
+        this.refreshDisplay(list);
+    },
+
+    warn: function (text) {
+        var $w = $('#ret_warning');
+        if (text) { $w.text(text).show(); } else { $w.hide().text(''); }
+    },
+
+    renderTable: function () {
+        var self = this;
+        var $body = $('#retentions_table tbody').empty();
+        this.draft.forEach(function (item, index) {
+            var code = item.split(':')[0];
+            $body.append(
+                '<tr><td>' + self.esc(self.names[code] || code) + '</td>' +
+                '<td class="text-end">' + self.esc(self.rate(item)) + ' %</td>' +
+                '<td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger ret-remove" data-index="' + index +
+                '" title="Quitar"><i class="fas fa-trash"></i></button></td></tr>');
+        });
+        $('#retentions_table').toggle(this.draft.length > 0);
+        $('#ret_empty').toggle(this.draft.length === 0);
+    },
+
+    fillRates: function () {
+        var code = $('#ret_type').val();
+        var $rate = $('#ret_rate').empty().append('<option value="">Seleccionar</option>');
+        (this.catalog.rates[code] || []).forEach(function (r) { $rate.append('<option value="' + r + '">' + r + '</option>'); });
+        $rate.prop('disabled', !code).val('');
+    },
+
+    // Agrega la combinación elegida a la lista de la ventana. Devuelve false si falta algo o ya estaba.
+    addSelected: function () {
+        var code = $('#ret_type').val(), rate = $('#ret_rate').val();
+        if (!code || !rate) {
+            this.warn('Elija la retención y el porcentaje.');
+            return false;
+        }
+        var item = code + ':' + rate;
+        if (this.draft.indexOf(item) !== -1) {
+            this.warn('Esa retención ya está agregada.');
+            return false;
+        }
+        this.warn('');
+        this.draft.push(item);
+        this.renderTable();
+        $('#ret_rate').val('');
+        return true;
+    },
+
+    open: function () {
+        this.draft = this.parse(this.$hidden.val());
+        $('#ret_type').val('');
+        this.fillRates();
+        this.warn('');
+        this.renderTable();
+        this.modal.show();
+    },
+
+    init: function () {
+        var self = this;
+        var data = document.getElementById('retention-catalog');
+        if (!data || !document.getElementById('modalRetentions')) { return; }
+        try { self.catalog = JSON.parse(data.textContent); } catch (e) { return; }
+        self.catalog.types.forEach(function (t) { self.names[t.code] = t.name; });
+        self.$hidden = $('input[name="retentions"]');
+        self.$display = $('#retentions_display');
+        self.modal = new bootstrap.Modal(document.getElementById('modalRetentions'));
+
+        var $type = $('#ret_type').empty().append('<option value="">Seleccionar</option>');
+        self.catalog.types.forEach(function (t) { $type.append('<option value="' + t.code + '">' + self.esc(t.name) + '</option>'); });
+        self.fillRates();
+
+        self.refreshDisplay(self.parse(self.$hidden.val()));
+        $('#btn_retentions, #retentions_display').on('click', function () { self.open(); });
+        $type.on('change', function () { self.warn(''); self.fillRates(); });
+        $('#ret_add').on('click', function () { self.addSelected(); });
+        $('#retentions_table').on('click', '.ret-remove', function () {
+            self.draft.splice(parseInt($(this).data('index'), 10), 1);
+            self.renderTable();
+        });
+        $('#ret_accept').on('click', function () {
+            // Si eligió una retención y su porcentaje pero no pulsó «Agregar», se agrega para no perderla
+            if ($('#ret_type').val() && $('#ret_rate').val()) { self.addSelected(); }
+            self.save(self.draft);
+            self.modal.hide();
+        });
+    }
+};
+
+$(function () {
+    retentions.init();
 });

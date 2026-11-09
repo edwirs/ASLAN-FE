@@ -5,7 +5,7 @@ from django.http import HttpResponse
 from django.urls import reverse_lazy
 from django.views.generic import DeleteView, CreateView, UpdateView, TemplateView
 
-from core.pos import product_excel
+from core.pos import product_excel, taxes
 from core.pos.excel_views import ExcelExportView, ExcelImportView, ExcelTemplateView
 from core.pos.forms import ProductForm
 from core.pos.models import Product
@@ -37,6 +37,10 @@ class PresentationsMixin:
             if uses:
                 sync_presentations(form.instance, rows)
         return data
+
+    def tax_context(self):
+        """Catálogo de retenciones para la ventana «Retenciones» del formulario."""
+        return taxes.catalog_for_js()
 
     def presentations_context(self):
         product = getattr(self, 'object', None)
@@ -102,6 +106,7 @@ class ProductCreateView(PresentationsMixin, GroupPermissionMixin, CreateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['presentations'] = self.presentations_context()
+        context['retention_catalog'] = self.tax_context()
         context['title'] = 'Nuevo registro de un Producto'
         context['list_url'] = self.success_url
         context['action'] = 'add'
@@ -135,6 +140,7 @@ class ProductUpdateView(PresentationsMixin, GroupPermissionMixin, UpdateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['presentations'] = self.presentations_context()
+        context['retention_catalog'] = self.tax_context()
         context['title'] = 'Edición de un Producto'
         context['list_url'] = self.success_url
         context['action'] = 'edit'

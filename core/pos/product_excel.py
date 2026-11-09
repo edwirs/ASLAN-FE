@@ -4,6 +4,8 @@ El stock inicial de todo producto importado es 0: el inventario se carga despué
 define en el archivo es si cada fila es un producto o un servicio (sin inventario). La exportación usa las mismas
 columnas que la plantilla, más el stock actual como dato informativo (la importación lo ignora).
 """
+import json
+
 from django import forms
 from django.db import transaction
 from openpyxl import Workbook
@@ -13,6 +15,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 from core.pos.excel_utils import (MAX_FILE_SIZE, MAX_ROWS, YES_NO, ImportFileError, normalize, parse_money, put,
                                   read_rows as read_sheet_rows, style_header, to_bytes, yes_no)
+from core.pos import taxes
 from core.pos.forms import ProductForm
 from core.pos.models import Category, Product
 from core.pos.units import DECIMAL_UNITS, DEFAULT_UNIT, STANDARD_UNITS, canonical_unit
@@ -31,18 +34,19 @@ COLUMNS = (
     ('price', 'Precio de compra', False, 16, False),
     ('pvp', 'Precio de venta', False, 16, False),
     ('is_service', '¿Es servicio? (Sí/No)', False, 20, False),
-    ('with_tax', '¿Cobra impuesto? (Sí/No)', False, 24, False),
+    ('tax', 'Impuesto', False, 34, False),
+    ('retentions', 'Retenciones (%)', False, 22, True),
     ('unit_name', 'Unidad de medida', False, 18, False),
     ('allow_decimals', '¿Permite decimales? (Sí/No)', False, 26, False),
     ('min_stock', 'Stock mínimo', False, 14, False),
     ('is_active', 'Activo (Sí/No)', False, 16, False),
 )
 REQUIRED = [c[0] for c in COLUMNS if c[2]]
-YES_NO_KEYS = ('is_service', 'with_tax', 'allow_decimals', 'is_active')
+YES_NO_KEYS = ('is_service', 'allow_decimals', 'is_active')
 FIELD_LABELS = {
     'code': 'Código', 'name': 'Nombre', 'category': 'Categoría', 'barcode': 'Código de barras',
     'description': 'Descripción', 'price': 'Precio de compra', 'pvp': 'Precio de venta', 'unit_name': 'Unidad de medida',
-    'min_stock': 'Stock mínimo', 'stock': 'Stock',
+    'min_stock': 'Stock mínimo', 'stock': 'Stock', 'tax': 'Impuesto', 'retentions': 'Retenciones',
 }
 STOCK_HEADER = 'Stock actual (solo informativo)'
 
@@ -74,7 +78,8 @@ def build_template():
     lists = wb.create_sheet('Listas')
     categories = list(Category.objects.order_by('name').values_list('name', flat=True))
     columns = {'A': ('Sí/No', [label for _, label in YES_NO]), 'B': ('Unidad', list(STANDARD_UNITS)),
-               'C': ('Categoría', categories)}
+               'C': ('Categoría', categories), 'D': ('Impuesto', [label for _, label in taxes.TAX_CHOICES]),
+               'E': ('Retenciones (%)', sorted(taxes.RETENTION_BY_RATE, key=float))}
     for letter, (title, values) in columns.items():
         lists[f'{letter}1'] = title
         for offset, value in enumerate(values, start=2):
@@ -83,7 +88,7 @@ def build_template():
 
     keys = [c[0] for c in COLUMNS]
     last = MAX_ROWS + 1
-    targets = [(key, 'A') for key in YES_NO_KEYS] + [('unit_name', 'B'), ('category', 'C')]
+    targets = [(key, 'A') for key in YES_NO_KEYS] + [('unit_name', 'B'), ('category', 'C'), ('tax', 'D')]
     for key, letter in targets:
         size = len(columns[letter][1]) + 1
         is_category = key == 'category'
@@ -125,7 +130,10 @@ def build_template():
                       'Las filas con una categoría que no exista no se importan.'),
         ('Precios', 'Números sin el símbolo $ y sin separador de miles, por ejemplo 12500 o 12500,50. '
                     'Precio de venta vacío = 0.'),
-        ('¿Cobra impuesto?', 'Sí o No. Vacío = Sí.'),
+        ('Impuesto', 'Elija de la lista: Excluido, Exento, IVA 5 %, IVA 19 %, Impoconsumo 4 %, 8 % o 16 %. '
+                     'Vacío = 19.00-Tarifa General(IVA).'),
+        ('Retenciones (%)', 'Opcional. Porcentajes separados por coma, por ejemplo 0.50, 1.50. Cada porcentaje identifica '
+                            'su retención: 15 y 100 son ReteIVA; 0.10 a 20 son ReteRenta (ver la hoja «Listas»).'),
         ('Unidad de medida', 'Unidad, Kilo, Litro, Caja... (lista desplegable). Vacío = Unidad.'),
         ('¿Permite decimales?', 'Sí si se vende en fracciones (0,5 kilo). Vacío: Sí cuando la unidad es Kilo, Libra, '
                                 'Litro, Metro, etc.; en los demás casos No.'),
@@ -165,7 +173,8 @@ def build_export():
             'code': product.code, 'name': product.name, 'category': product.category.name,
             'barcode': product.barcode or '', 'description': product.description or '',
             'price': float(product.price), 'pvp': float(product.pvp), 'is_service': sino(product.is_service),
-            'with_tax': sino(product.with_tax), 'unit_name': product.unit_name or DEFAULT_UNIT,
+            'tax': product.tax_data().label, 'retentions': taxes.retention_rates_text(product.retentions),
+            'unit_name': product.unit_name or DEFAULT_UNIT,
             'allow_decimals': sino(product.allow_decimals),
             'min_stock': float(product.min_stock) if product.min_stock is not None else '',
             'is_active': sino(product.is_active),
@@ -204,6 +213,19 @@ class Catalogs:
         return found
 
 
+def tax_key(text):
+    """Clave del impuesto a partir de lo escrito en la celda (la etiqueta completa, o solo el nombre o la tarifa si es única).
+    Vacío = 19.00-Tarifa General(IVA)."""
+    text = str(text or '').strip()
+    if not text:
+        return taxes.DEFAULT_TAX
+    wanted = normalize(text)
+    for tax in taxes.TAXES:
+        if wanted in (normalize(tax.label), normalize(tax.key)):
+            return tax.key
+    raise ValueError(f'El impuesto «{text}» no es válido. Use uno de la lista: ' + ', '.join(t.label for t in taxes.TAXES) + '.')
+
+
 def form_errors(form):
     return ' | '.join(f'{FIELD_LABELS.get(field, field)}: ' + ' '.join(errors) for field, errors in form.errors.items())
 
@@ -216,7 +238,8 @@ def import_row(record, catalogs):
             raise ValueError(f'Falta «{header}».')
 
     is_service = yes_no(record.get('is_service', ''), False, '«¿Es servicio?»')
-    with_tax = yes_no(record.get('with_tax', ''), True, '«¿Cobra impuesto?»')
+    tax = tax_key(record.get('tax', ''))
+    retentions = taxes.parse_retention_rates(record.get('retentions', ''))
     is_active = yes_no(record.get('is_active', ''), True, '«Activo»')
     unit = canonical_unit(str(record.get('unit_name', ''))) or DEFAULT_UNIT
     allow_decimals = yes_no(record.get('allow_decimals', ''), unit in DECIMAL_UNITS, '«¿Permite decimales?»')
@@ -236,7 +259,9 @@ def import_row(record, catalogs):
         'stock': '0',   # el stock inicial siempre es 0; el inventario se carga después
         'unit_name': unit, 'min_stock': min_stock, 'presentation_mode': '',
     }
-    for key, value in (('is_service', is_service), ('with_tax', with_tax), ('is_active', is_active),
+    data['tax'] = tax
+    data['retentions'] = json.dumps(retentions)
+    for key, value in (('is_service', is_service), ('is_active', is_active),
                        ('allow_decimals', allow_decimals and not is_service)):
         if value:
             data[key] = 'on'   # una casilla ausente en el formulario se guarda como «no»

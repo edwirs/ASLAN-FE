@@ -6,6 +6,7 @@ from .models import *
 from .images import ProductImageField
 import json as _json
 from .units import DECIMAL_UNITS, DEFAULT_UNIT, OTHER, STANDARD_UNITS, canonical_unit, unit_choices
+from . import taxes
 
 
 class CategoryForm(forms.ModelForm):
@@ -43,9 +44,18 @@ class ProductForm(forms.ModelForm):
         max_length=30, required=False, label='Nombre de la unidad base',
         widget=forms.Select(attrs={'class': 'form-control select2', 'style': 'width: 100%;',
                                    'data-decimal-units': _json.dumps(DECIMAL_UNITS, ensure_ascii=False)}))
+    # Impuesto: reemplaza al antiguo «¿Se cobra impuesto?» (el modelo calcula ``with_tax`` a partir de este valor)
+    tax = forms.ChoiceField(
+        choices=taxes.TAX_CHOICES, label='Impuesto', initial=taxes.DEFAULT_TAX,
+        widget=forms.Select(attrs={'class': 'form-select'}))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.initial['tax'] = self.instance.effective_tax()
+        else:
+            # Producto nuevo: «¿Sin inventario?» arranca activo (el modelo conserva False como valor por defecto)
+            self.initial['is_service'] = True
         self._custom_units = [u for u in Product.objects.order_by().values_list('unit_name', flat=True).distinct() if u]
         self.fields['unit_name'].widget.choices = unit_choices(
             current=self.instance.unit_name if self.instance.pk else '', custom=self._custom_units)
@@ -57,6 +67,7 @@ class ProductForm(forms.ModelForm):
     class Meta:
         model = Product
         fields = '__all__'
+        exclude = ['with_tax']
         field_classes = {'image': ProductImageField}
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control','placeholder': 'Ingrese un nombre'}),
@@ -68,7 +79,7 @@ class ProductForm(forms.ModelForm):
             'pvp': forms.TextInput(attrs={'name': 'pvp'}),
             'stock': forms.TextInput(attrs={'name': 'stock'}),
             'is_service': forms.CheckboxInput(attrs={'class': 'form-check-input', 'name': 'is_service'}),
-            'with_tax': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'retentions': forms.HiddenInput(),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'presentation_mode': forms.RadioSelect(),
             'min_stock': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': 'any', 'placeholder': 'Sin mínimo'}),
@@ -96,6 +107,23 @@ class ProductForm(forms.ModelForm):
         if len(value) > 30:
             raise forms.ValidationError('El nombre de la unidad no puede superar 30 caracteres.')
         return value
+
+    def clean_retentions(self):
+        """Lista de retenciones («código:tarifa»): solo las del catálogo y sin repetir."""
+        raw = self.cleaned_data.get('retentions')
+        if isinstance(raw, str):
+            try:
+                raw = _json.loads(raw or '[]')
+            except ValueError:
+                raise forms.ValidationError('Las retenciones no tienen un formato válido.')
+        if raw is None:
+            return []
+        if not isinstance(raw, list):
+            raise forms.ValidationError('Las retenciones no tienen un formato válido.')
+        try:
+            return taxes.normalize_retentions(raw)
+        except ValueError as e:
+            raise forms.ValidationError(str(e))
 
     def clean_presentation_mode(self):
         return self.cleaned_data.get('presentation_mode') or Product.MODE_CONVERSION

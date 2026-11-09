@@ -75,7 +75,12 @@ class Product(models.Model):
     pvp = models.DecimalField(max_digits=9, decimal_places=2, default=0.00, verbose_name='Precio de Venta')
     image = models.ImageField(upload_to='product/%Y/%m/%d', null=True, blank=True, verbose_name='Imagen')
     is_service = models.BooleanField(default=False, verbose_name='¿Sin Inventario?')
+    # ``with_tax`` ya no se edita: lo calcula ``save()`` a partir de ``tax`` (cobra impuesto si la tarifa es mayor que 0).
     with_tax = models.BooleanField(default=True, verbose_name='¿Se cobra impuesto?')
+    # Impuesto del producto (catálogo en core/pos/taxes.py). Vacío = producto anterior a este campo: se deduce de ``with_tax``.
+    tax = models.CharField(max_length=20, blank=True, default='', verbose_name='Impuesto')
+    # Retenciones que aplican al producto: lista de textos «código:tarifa», p. ej. ['06:0.50', '05:15.00'].
+    retentions = models.JSONField(default=list, blank=True, verbose_name='Retenciones')
     stock = models.DecimalField(max_digits=12, decimal_places=3, default=0, verbose_name='Stock')
     is_active = models.BooleanField(default=True, verbose_name='Estado')
     unit_name = models.CharField(max_length=30, default='Unidad', verbose_name='Nombre de la unidad base')
@@ -96,6 +101,28 @@ class Product(models.Model):
 
     def __str__(self):
         return self.get_full_name()
+
+    def effective_tax(self):
+        """Clave del impuesto del producto. Los anteriores al campo ``tax`` se deducen de «¿se cobra impuesto?»."""
+        from core.pos import taxes
+        if self.tax in taxes.TAX_BY_KEY:
+            return self.tax
+        return taxes.DEFAULT_TAX if self.with_tax else taxes.LEGACY_NO_TAX
+
+    def tax_data(self):
+        from core.pos import taxes
+        return taxes.TAX_BY_KEY[self.effective_tax()]
+
+    def save(self, *args, **kwargs):
+        # ``with_tax`` se mantiene sincronizado con el impuesto: el resto del sistema (ventas, compras, facturas) lo sigue leyendo.
+        from core.pos import taxes
+        update_fields = kwargs.get('update_fields')
+        if update_fields is None or {'tax', 'with_tax'} & set(update_fields):
+            self.tax = self.effective_tax()
+            self.with_tax = taxes.is_taxed(self.tax)
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {'tax', 'with_tax'}
+        super().save(*args, **kwargs)
 
     def get_full_name(self):
         return f'{self.code} - {self.name} ({self.category.name})'
@@ -118,6 +145,11 @@ class Product(models.Model):
         item['stock'] = float(self.stock) 
         item['min_stock'] = float(self.min_stock) if self.min_stock is not None else None
         item['image'] = self.get_image()
+        tax = self.tax_data()
+        item['tax'] = tax.key
+        item['tax_label'] = tax.label
+        item['tax_rate'] = float(tax.rate)
+        item['retentions'] = list(self.retentions or [])
         return item
 
     def cost_per_sale_unit(self, presentation=None, factor=1, own_stock=False):

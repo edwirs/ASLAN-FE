@@ -20,6 +20,7 @@ var product = {
                 {data: "name"},
                 {data: "code"},
                 {data: "category.name"},
+                {data: "tax_label"},
                 {data: "stock_summary"},
                 {data: "pvp"},
                 {data: "id"},
@@ -33,6 +34,21 @@ var product = {
                             name += ' <span class="badge bg-info rounded-pill" title="Presentaciones activas">' + row.presentations_count + ' present.</span>';
                         }
                         return name;
+                    }
+                },
+                {
+                    targets: [4],
+                    render: function (data, type, row) {
+                        var esc = function (t) { return $('<div>').text(t).html(); };
+                        if (type !== 'display') {
+                            return data;
+                        }
+                        var html = '<span class="badge bg-light text-dark border">' + esc(data) + '</span>';
+                        if (row.retentions && row.retentions.length) {
+                            var rates = row.retentions.map(function (r) { return r.split(':')[1]; }).join(', ');
+                            html += ' <span class="badge bg-secondary" title="Retenciones: ' + esc(rates) + ' %">' + row.retentions.length + ' ret.</span>';
+                        }
+                        return html;
                     }
                 },
                 {
