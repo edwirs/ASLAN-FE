@@ -16,7 +16,7 @@ def site_settings(request):
     }
 
 
-def _build_menu(nodes, user):
+def _build_menu(nodes, user, ocultos=frozenset()):
     """Filtra el menú del registro según los permisos del usuario.
 
     Un ítem es visible si no exige permiso o el usuario lo tiene; una sección
@@ -26,9 +26,11 @@ def _build_menu(nodes, user):
     visible = []
     for node in nodes:
         if isinstance(node, registry.Section):
-            children = _build_menu(node.children, user)
+            children = _build_menu(node.children, user, ocultos)
             if children:
                 visible.append({'label': node.label, 'icon': node.icon, 'children': children})
+            continue
+        if node.key in ocultos:   # módulo no contratado por la empresa
             continue
         if node.view_perm is not None and not user.has_perm(node.view_perm):
             continue
@@ -45,4 +47,24 @@ def sidebar_menu(request):
     user = getattr(request, 'user', None)
     if user is None or not user.is_authenticated:
         return {}
-    return {'sidebar_menu': _build_menu(registry.MENU, user)}
+    from core.tenants.estado import items_ocultos, modulos_activos  # import local: evita ciclos al cargar la configuración
+
+    ocultos = items_ocultos(modulos_activos(getattr(request, 'tenant', None)))
+    return {'sidebar_menu': _build_menu(registry.MENU, user, ocultos)}
+
+
+def estado_empresa(request):
+    """Avisos de la plataforma para los usuarios de una empresa: suscripción por vencer o vencida, y anuncios vigentes."""
+    user = getattr(request, 'user', None)
+    if user is None or not user.is_authenticated:
+        return {}
+    from core.tenants.estado import anuncios_para, estado_suscripcion
+
+    empresa = getattr(request, 'tenant', None)
+    try:
+        estado = estado_suscripcion(empresa) if empresa is not None else None
+        return {'aviso_suscripcion': estado if estado and estado['nivel'] in ('por_vencer', 'gracia') else None,
+                'anuncios_plataforma': anuncios_para(empresa)}
+    except Exception:  # un fallo aquí nunca debe tumbar una pantalla de la empresa
+        logger.debug('No se pudo leer el estado de la empresa.', exc_info=True)
+        return {}

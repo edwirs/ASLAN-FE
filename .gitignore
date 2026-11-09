@@ -379,3 +379,7 @@ pip-selfcheck.json
 
 # Llave privada para firmar peticiones a QZ Tray (cajón monedero)
 secrets/
+
+# Panel de la plataforma: clave del dueño y respaldos de la base (nunca se versionan)
+.env.secrets
+respaldos/

@@ -23,6 +23,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 
 environ.Env.read_env(os.path.join(BASE_DIR, '.env.local'))
+# Secretos que NO se versionan (clave del panel de la plataforma, etc.). Se lee después: lo que ya esté definido gana.
+_ENV_SECRETOS = os.path.join(BASE_DIR, '.env.secrets')
+if os.path.exists(_ENV_SECRETOS):
+    environ.Env.read_env(_ENV_SECRETOS)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.0/howto/deployment/checklist/
@@ -96,6 +100,7 @@ INSTALLED_APPS = list(SHARED_APPS) + [
 
 MIDDLEWARE = [
     'django_tenants.middleware.main.TenantMainMiddleware',
+    'core.tenants.middleware.EstadoEmpresaMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -123,6 +128,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'core.security.context_processors.site_settings',
                 'core.security.context_processors.sidebar_menu',
+                'core.security.context_processors.estado_empresa',
             ],
         },
     },
@@ -254,3 +260,22 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Se generan una sola vez con ``python manage.py generate_qz_cert``. La llave privada nunca se versiona (ver .gitignore).
 QZ_PRIVATE_KEY_PATH = env.str('QZ_PRIVATE_KEY_PATH', default=str(BASE_DIR / 'secrets' / 'qz' / 'private-key.pem'))
 QZ_CERTIFICATE_PATH = env.str('QZ_CERTIFICATE_PATH', default=str(BASE_DIR / 'secrets' / 'qz' / 'digital-certificate.txt'))
+
+
+# Panel de la plataforma (solo ASLAN): vive en el dominio de la empresa interna «public» (ej. admin.aslantecnologia.online).
+# El acceso es de un único dueño: usuario + clave cifrada en .env.secrets (se genera con `manage.py plataforma_clave`).
+PUBLIC_SCHEMA_URLCONF = 'config.urls_public'
+PLATAFORMA_USUARIO = env('PLATAFORMA_USUARIO', default='')
+PLATAFORMA_CLAVE_HASH = env('PLATAFORMA_CLAVE_HASH', default='')
+# True SOLO detrás de nginx: toma la IP del X-Forwarded-For (si no, cualquiera podría inventar su IP).
+PLATAFORMA_CONFIAR_PROXY = env.bool('PLATAFORMA_CONFIAR_PROXY', default=False)
+
+# Suscripciones: días de gracia después de vencer lo pagado y si pasado ese plazo se suspende el acceso solo.
+GRACIA_DIAS = env.int('GRACIA_DIAS', default=5)
+SUSPENDER_POR_VENCIMIENTO = env.bool('SUSPENDER_POR_VENCIMIENTO', default=True)
+APP_VERSION = '1.0.0'
+
+# Respaldos de la base de datos (pg_dump). Carpeta FUERA de git y de media; ver core/tenants/respaldos.py.
+RESPALDOS_DIR = env('RESPALDOS_DIR', default=os.path.join(BASE_DIR, 'respaldos'))
+RESPALDOS_RETENCION_DIAS = env.int('RESPALDOS_RETENCION_DIAS', default=14)
+PG_DUMP = env('PG_DUMP', default='')   # ruta de pg_dump si no es la que se detecta sola (debe ser de la MISMA versión que el servidor)

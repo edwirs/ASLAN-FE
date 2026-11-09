@@ -3,6 +3,7 @@ import re
 from django.conf import settings
 from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
+from django_tenants.utils import get_public_schema_name
 
 # Rutas que un visitante sin sesión SÍ puede abrir. Todo lo demás exige login,
 # de modo que una vista nueva (o una que olvidó su mixin) nunca queda expuesta.
@@ -12,6 +13,7 @@ PUBLIC_PATH_PATTERNS = tuple(re.compile(p) for p in (
     r'^/reset/password/$',           # pedir enlace de recuperación
     r'^/update/password/[^/]+/?$',   # enlace de recuperación recibido por correo
     r'^/logout/$',
+    r'^/acceso-soporte/',            # «entrar como» desde el panel de la plataforma (token firmado de un solo uso)
     r'^/admin/',                     # el admin de Django maneja su propio login
     r'^/media/dashboard/',           # logo que se muestra en la pantalla de login
 ))
@@ -29,6 +31,10 @@ class LoginRequiredMiddleware:
         return path.startswith(PUBLIC_PREFIXES) or any(p.match(path) for p in PUBLIC_PATH_PATTERNS)
 
     def __call__(self, request):
+        # El dominio de la plataforma (schema «public») no tiene usuarios ni sesiones: su panel tiene su propio acceso.
+        tenant = getattr(request, 'tenant', None)
+        if getattr(tenant, 'schema_name', None) == get_public_schema_name():
+            return self.get_response(request)
         if request.user.is_authenticated or self.is_public(request.path_info):
             return self.get_response(request)
 
