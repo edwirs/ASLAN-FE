@@ -219,3 +219,14 @@ function loading(args) {
         })
     });
 }
+
+/**
+ * Tarifa de impuesto de una línea (fracción: 0.19 = 19 %): la del impuesto del producto (product.tax_rate viene en %).
+ * Sin impuesto (Excluido, Exento o producto que no cobra) es 0. Debe dar lo mismo que Product.tax_fraction() en el servidor.
+ */
+function lineTaxRate(product) {
+    if (!product.with_tax) {
+        return 0;
+    }
+    return (parseFloat(product.tax_rate) || 0) / 100;
+}

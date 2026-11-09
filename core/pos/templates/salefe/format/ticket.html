@@ -164,11 +164,19 @@
             <td class="float-right font-weight-bold">Valor bruto</td>
             <td class="text-right">$ {{ sale.subtotal_12_sin_iva|floatformat:0|intcomma }}</td>
         </tr>
+        {% for t in sale.tax_breakdown %}
         <tr>
             <td></td>
-            <td class="float-right font-weight-bold">IVA {{ sale.get_iva_percent }}%:</td>
-            <td class="text-right">$ {{ sale.total_iva|floatformat:0|intcomma }}</td>
+            <td class="float-right font-weight-bold">{{ t.label }}:</td>
+            <td class="text-right">$ {{ t.tax|floatformat:0|intcomma }}</td>
         </tr>
+        {% empty %}
+        <tr>
+            <td></td>
+            <td class="float-right font-weight-bold">IVA 0%:</td>
+            <td class="text-right">$ 0</td>
+        </tr>
+        {% endfor %}
         <tr>
             <td></td>
             <td class="float-right font-weight-bold">Descuentos</td>

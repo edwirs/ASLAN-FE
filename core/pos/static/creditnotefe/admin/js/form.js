@@ -33,7 +33,7 @@ var creditNote = {
             var pvp = parseFloat(value.pvp) || 0;
             var dscto = parseFloat(value.dscto) || 0;
 
-            value.iva = parseFloat(tax);
+            value.iva = lineTaxRate(value);
             value.price_with_vat = pvp + (pvp * value.iva);
             value.subtotal = pvp * cant;
             value.total_dscto = value.subtotal * (dscto / 100);
@@ -159,6 +159,7 @@ function flattenSaleDetail(detail) {
         sale_detail_id: detail.id,
         name: detail.product.name,
         with_tax: detail.product.with_tax,
+        tax_rate: detail.tax_rate,   // tarifa con que se facturó la línea
         cant: detail.cant,
         pvp: parseFloat(detail.price),
         dscto: parseFloat(detail.dscto) * 100,

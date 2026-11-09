@@ -103,7 +103,8 @@ class Product(models.Model):
         return self.get_full_name()
 
     def effective_tax(self):
-        """Clave del impuesto del producto. Los anteriores al campo ``tax`` se deducen de «¿se cobra impuesto?»."""
+        """Clave del impuesto del producto. Los anteriores al campo ``tax`` se deducen de «¿se cobra impuesto?»:
+        los que cobraban quedan en IVA 19 % y los que no, en Excluido (ver el comando ``sync_product_taxes``)."""
         from core.pos import taxes
         if self.tax in taxes.TAX_BY_KEY:
             return self.tax
@@ -112,6 +113,14 @@ class Product(models.Model):
     def tax_data(self):
         from core.pos import taxes
         return taxes.TAX_BY_KEY[self.effective_tax()]
+
+    def tax_fraction(self):
+        """Tarifa de impuesto de una línea de este producto, como fracción (0.19 = 19 %). 0 si no cobra (Excluido o Exento)."""
+        return float(self.tax_data().rate) / 100
+
+    def tax_snapshot(self):
+        """(impuesto, retenciones) que se copian a la línea de la venta: quedan fijos aunque luego se edite el producto."""
+        return self.effective_tax(), list(self.retentions or [])
 
     def save(self, *args, **kwargs):
         # ``with_tax`` se mantiene sincronizado con el impuesto: el resto del sistema (ventas, compras, facturas) lo sigue leyendo.
@@ -501,10 +510,17 @@ class Sale(models.Model):
         self.total = (subtotal - float(self.total_dscto)) + float(self.total_iva)
         self.save()
 
+    def tax_breakdown(self):
+        """Impuestos agrupados por tarifa, para los comprobantes (ver core/pos/taxes.py)."""
+        from core.pos import taxes
+        return taxes.breakdown(self.saledetail_set.select_related('product'), self.dscto)
+
     def calculate_detail(self):
-        for detail in self.saledetail_set.filter():
+        for detail in self.saledetail_set.select_related('product'):
             detail.price = float(detail.price)
-            detail.iva = float(self.iva)
+            # Cada producto con su propio impuesto
+            detail.iva = detail.product.tax_fraction()
+            detail.tax_key, detail.retentions = detail.product.tax_snapshot()
             detail.price_with_vat = detail.price + (detail.price * detail.iva)
             detail.subtotal = detail.price * float(detail.cant)
             detail.total_dscto = detail.subtotal * float(detail.dscto)
@@ -595,6 +611,9 @@ class SaleDetail(models.Model):
     total_dscto = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     total = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     is_active = models.BooleanField(default=True, verbose_name='Estado')
+    # Impuesto y retenciones del producto al momento de vender (vacío = línea anterior a este campo)
+    tax_key = models.CharField(max_length=20, blank=True, default='')
+    retentions = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return self.product.name
@@ -605,7 +624,7 @@ class SaleDetail(models.Model):
         return self.product.name
 
     def get_iva_percent(self):
-        return int(self.iva * 100)
+        return round(float(self.iva) * 100)
 
     def toJSON(self):
         item = model_to_dict(self, exclude=['sale'])
@@ -622,6 +641,7 @@ class SaleDetail(models.Model):
         item['dscto'] = float(self.dscto)
         item['total_dscto'] = float(self.total_dscto)
         item['total'] = float(self.total)
+        item['tax_rate'] = float(self.iva) * 100   # tarifa con que se facturó la línea (en %)
         return item
 
     class Meta:
@@ -663,10 +683,14 @@ class Price(models.Model):
         self.total = float(self.get_full_subtotal()) + float(self.total_iva) - float(self.total_dscto)
         self.save()
 
+    def tax_breakdown(self):
+        from core.pos import taxes
+        return taxes.breakdown(self.pricedetail_set.select_related('product'), self.dscto)
+
     def calculate_detail(self):
-        for detail in self.pricedetail_set.filter():
+        for detail in self.pricedetail_set.select_related('product'):
             detail.price = float(detail.price)
-            detail.iva = float(self.iva)
+            detail.iva = detail.product.tax_fraction()
             detail.price_with_vat = detail.price + (detail.price * detail.iva)
             detail.subtotal = detail.price * detail.cant
             detail.total_dscto = detail.subtotal * float(detail.dscto)
@@ -716,7 +740,7 @@ class PriceDetail(models.Model):
         return self.product.name
 
     def get_iva_percent(self):
-        return int(self.iva * 100)
+        return round(float(self.iva) * 100)
 
     def toJSON(self):
         item = model_to_dict(self, exclude=['price'])
@@ -767,7 +791,7 @@ class Buy(models.Model):
         return float(self.subtotal_0) + float(self.subtotal_12)
 
     def get_iva_percent(self):
-        return int(self.iva * 100)
+        return round(float(self.iva) * 100)
 
     def calculate_invoice(self):
         self.subtotal_0 = float(self.buydetail_set.filter(product__with_tax=False).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))
@@ -777,10 +801,14 @@ class Buy(models.Model):
         self.total = float(self.get_full_subtotal()) - float(self.total_dscto)
         self.save()
 
+    def tax_breakdown(self):
+        from core.pos import taxes
+        return taxes.breakdown(self.buydetail_set.select_related('product'), self.dscto)
+
     def calculate_detail(self):
-        for detail in self.buydetail_set.filter():
+        for detail in self.buydetail_set.select_related('product'):
             detail.price = float(detail.price)
-            detail.iva = float(self.iva)
+            detail.iva = detail.product.tax_fraction()
             detail.price_with_vat = detail.price + (detail.price * detail.iva)
             detail.subtotal = detail.price * float(detail.cant)
             detail.total_dscto = detail.subtotal * float(detail.dscto)
@@ -842,7 +870,7 @@ class BuyDetail(models.Model):
         return self.product.name
 
     def get_iva_percent(self):
-        return int(self.iva * 100)
+        return round(float(self.iva) * 100)
 
     def toJSON(self):
         item = model_to_dict(self, exclude=['buy'])
@@ -1426,10 +1454,21 @@ class CreditNote(models.Model):
     def get_full_subtotal(self):
         return float(self.subtotal_0) + float(self.subtotal_12)
 
+    def tax_breakdown(self):
+        from core.pos import taxes
+        return taxes.breakdown(self.creditnotedetail_set.select_related('product'), self.dscto)
+
     def calculate_detail(self):
-        for detail in self.creditnotedetail_set.filter():
+        for detail in self.creditnotedetail_set.select_related('product', 'sale_detail'):
             detail.price = float(detail.price)
-            detail.iva = float(self.iva)
+            origin = detail.sale_detail
+            if origin is not None and origin.tax_key:
+                # La nota crédito repite EXACTAMENTE el impuesto y las retenciones con que se facturó la línea
+                detail.iva = float(origin.iva)
+                detail.tax_key, detail.retentions = origin.tax_key, list(origin.retentions or [])
+            else:
+                detail.iva = detail.product.tax_fraction()
+                detail.tax_key, detail.retentions = detail.product.tax_snapshot()
             detail.price_with_vat = detail.price + (detail.price * detail.iva)
             detail.subtotal = detail.price * detail.cant
             detail.total_dscto = detail.subtotal * float(detail.dscto)
@@ -1510,12 +1549,15 @@ class CreditNoteDetail(models.Model):
     dscto = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     total_dscto = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     total = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    # Impuesto y retenciones de la línea (copiados de la factura de origen o del producto)
+    tax_key = models.CharField(max_length=20, blank=True, default='')
+    retentions = models.JSONField(default=list, blank=True)
 
     def __str__(self):
         return self.product.name
 
     def get_iva_percent(self):
-        return int(self.iva * 100)
+        return round(float(self.iva) * 100)
 
     def toJSON(self):
         item = model_to_dict(self, exclude=['credit_note'])

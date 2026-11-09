@@ -18,7 +18,7 @@ var price = {
         var tax = this.detail.iva / 100;
 
         this.detail.products.forEach(function (value, index, array) {
-            value.iva = parseFloat(tax);
+            value.iva = lineTaxRate(value);
             value.price_with_vat = value.pvp + (value.pvp * value.iva);
             value.subtotal = value.pvp * value.cant;
             value.total_dscto = value.subtotal * parseFloat((value.dscto / 100));

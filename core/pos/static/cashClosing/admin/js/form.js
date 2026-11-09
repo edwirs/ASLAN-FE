@@ -70,7 +70,7 @@ var sale = {
             item.pvp = parseFloat(item.pvp) || 0;
             item.dscto = parseFloat(item.dscto) || 0;
 
-            item.iva = item.with_tax ? tax : 0;
+            item.iva = lineTaxRate(item);
 
             item.subtotal = item.pvp * item.cant;
 

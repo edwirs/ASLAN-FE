@@ -8,6 +8,8 @@ from django.core.cache import cache
 from django.db import connection
 from django.utils import timezone
 
+from core.pos import taxes
+
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +187,12 @@ def _build_customer_payload(client, target_email=None):
 def _build_items_payload(details, global_discount_rate, tax_rate):
     """Construye el array ``items`` que exige Factus a partir de un queryset de
     detalles (SaleDetail o CreditNoteDetail), ambos con los mismos campos
-    ``product``, ``dscto``, ``cant`` y ``price``."""
+    ``product``, ``dscto``, ``cant``, ``price``, ``iva``, ``tax_key`` y ``retentions``.
+
+    Cada línea lleva su propio impuesto: el que se guardó al vender (IVA ``01`` o INC ``04``, con su tarifa) y sus
+    retenciones (``withholding_taxes``: 05 ReteIVA, 06 ReteRenta). Las líneas anteriores a este esquema (sin
+    ``tax_key``) siguen usando la tarifa de la venta (``tax_rate``) y ``product.with_tax``.
+    """
     items = []
     global_discount_rate = Decimal(str(global_discount_rate or 0))
     for detail in details:
@@ -194,12 +201,19 @@ def _build_items_payload(details, global_discount_rate, tax_rate):
         effective_discount_rate = Decimal("1") - (
             (Decimal("1") - line_discount_rate) * (Decimal("1") - global_discount_rate)
         )
-        line_tax_rate = Decimal(str(tax_rate or 0))
-        tax = {"code": "01", "rate": _as_money(line_tax_rate)}
-        if not product.with_tax or line_tax_rate == 0:
-            tax.update({"rate": "0.00", "is_excluded": True})
+        info = taxes.TAX_BY_KEY.get(getattr(detail, "tax_key", "") or "")
+        if info:
+            line_tax_rate = Decimal(str(detail.iva or 0)) * 100
+            tax = {"code": info.code, "rate": _as_money(line_tax_rate)}
+            if info.excluded:
+                tax.update({"code": "01", "rate": "0.00", "is_excluded": True})
+        else:
+            line_tax_rate = Decimal(str(tax_rate or 0))
+            tax = {"code": "01", "rate": _as_money(line_tax_rate)}
+            if not product.with_tax or line_tax_rate == 0:
+                tax.update({"rate": "0.00", "is_excluded": True})
 
-        items.append({
+        item = {
             "code_reference": product.code,
             "name": product.name,
             "quantity": _as_quantity(detail.cant),
@@ -208,7 +222,15 @@ def _build_items_payload(details, global_discount_rate, tax_rate):
             "unit_measure_code": "94",
             "standard_code": "999",
             "taxes": [tax],
-        })
+        }
+        withholdings = []
+        for entry in getattr(detail, "retentions", None) or []:
+            code, _, rate = str(entry).partition(":")
+            if code in taxes.RETENTION_RATES and rate:
+                withholdings.append({"code": code, "rate": _as_money(Decimal(rate))})
+        if withholdings:
+            item["withholding_taxes"] = withholdings
+        items.append(item)
     return items
 
 

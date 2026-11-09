@@ -298,7 +298,11 @@
                         <tr><td>Nro líneas:</td><td class="text-end">{{ credit_note.creditnotedetail_set.count }}</td></tr>
                         <tr><td>Valor bruto:</td><td class="text-end">$ {{ credit_note.subtotal_12_sin_iva|floatformat:2|intcomma }}</td></tr>
                         <tr><td>Descuentos:</td><td class="text-end">$ {{ credit_note.total_dscto|default:"0.00"|floatformat:2|intcomma }}</td></tr>
-                        <tr><td>Impuestos:</td><td class="text-end">$ {{ credit_note.total_iva|default:"0.00"|floatformat:2|intcomma }}</td></tr>
+                        {% for t in credit_note.tax_breakdown %}
+                        <tr><td>{{ t.label }}:</td><td class="text-end">$ {{ t.tax|floatformat:2|intcomma }}</td></tr>
+                        {% empty %}
+                        <tr><td>Impuestos:</td><td class="text-end">$ 0,00</td></tr>
+                        {% endfor %}
                         <tr>
                             <td class="totals-final-row">Total nota crédito:</td>
                             <td class="text-end totals-final-row">$ {{ credit_note.total|floatformat:2|intcomma }}</td>

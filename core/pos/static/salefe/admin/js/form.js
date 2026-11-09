@@ -34,7 +34,7 @@ var sale = {
             var pvp = parseFloat(value.pvp) || 0;
             var dscto = parseFloat(value.dscto) || 0;
 
-            value.iva = parseFloat(tax);
+            value.iva = lineTaxRate(value);
             value.price_with_vat = pvp + (pvp * value.iva);
             value.subtotal = pvp * cant;
             value.total_dscto = value.subtotal * (dscto / 100);
