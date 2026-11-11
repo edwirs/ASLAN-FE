@@ -76,6 +76,9 @@ PERMISSIONS = {
         ('print_electronic_invoice', 'Imprimir facturas electrónicas'),
         ('download_electronic_invoice_pdf', 'Ver y descargar el PDF de facturas electrónicas'),
         ('resend_electronic_invoice_email', 'Reenviar facturas electrónicas por correo'),
+        ('change_electronic_invoice', 'Editar facturas electrónicas (mientras no estén validadas)'),
+        ('validate_electronic_invoice', 'Validar facturas electrónicas (enviarlas a la DIAN por Factus)'),
+        ('radian_electronic_invoice', 'Consultar y registrar eventos RADIAN de facturas electrónicas'),
         # Operaciones
         ('add_bar', 'Registrar ventas rápidas (barra)'),
         # Reportes
@@ -217,7 +220,8 @@ MENU = (
                'view_sale_client')),
         Item('electronic_invoices', 'Facturas Electrónicas', 'sale_Fe_admin_list', 'pos.view_electronic_invoice',
              q('pos', 'view_electronic_invoice', 'add_electronic_invoice', 'delete_electronic_invoice',
-               'print_electronic_invoice', 'download_electronic_invoice_pdf', 'resend_electronic_invoice_email')),
+               'print_electronic_invoice', 'download_electronic_invoice_pdf', 'resend_electronic_invoice_email',
+               'change_electronic_invoice', 'validate_electronic_invoice', 'radian_electronic_invoice')),
         Item('credit_notes', 'Notas Crédito', 'credit_note_Fe_admin_list', 'pos.view_creditnote',
              q('pos', 'view_creditnote', 'add_creditnote', 'delete_creditnote',
                'print_creditnote', 'download_creditnote_pdf', 'resend_creditnote_email')),
@@ -310,6 +314,9 @@ LEGACY_MAP = {
     'pos.view_sale': q('pos', 'view_electronic_invoice', 'print_electronic_invoice',
                        'download_electronic_invoice_pdf', 'resend_electronic_invoice_email'),
     'pos.add_sale': q('pos', 'add_electronic_invoice'),
+    # Quien podía crear facturas electrónicas (y con eso enviarlas a Factus) puede editarlas, validarlas y ver RADIAN
+    'pos.add_electronic_invoice': q('pos', 'change_electronic_invoice', 'validate_electronic_invoice',
+                                    'radian_electronic_invoice'),
     'pos.delete_sale': q('pos', 'delete_electronic_invoice'),
     # Los cierres de caja ya se podían ver: quien los veía también puede imprimirlos
     'pos.view_cashclosing': q('pos', 'print_cashclosing'),

@@ -2,6 +2,7 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib import messages
 from django.contrib.auth.models import Group
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -10,11 +11,13 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import CreateView, DeleteView, FormView, TemplateView
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
+from django.db.models import Count
 from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.conf import settings
 
+from core.pos import salefe_service
 from core.pos.forms import *
 from core.pos.sale_deletion import delete_sale
 from core.pos.utilities import printer
@@ -22,7 +25,8 @@ from core.reports.forms import ReportForm
 from core.pos.stock_lines import parse_quantity
 from core.security.mixins import GroupPermissionMixin
 from core.pos.choices import PAYMENTMETHODS, TRANSFERMETHODS
-from core.services.factus import create_invoice, get_numbering_ranges, download_invoice_xml, download_invoice_pdf
+from core.services.factus import (create_invoice, get_active_numbering_range, get_numbering_ranges, download_invoice_xml,
+                                  download_invoice_pdf)
 from core.services.services import send_sale_electronic_invoice_email, generate_qr_base64_from_url
 
 MODULE_NAME = 'Ventas FE'
@@ -42,11 +46,33 @@ class SaleFeListView(GroupPermissionMixin, FormView):
                 data = []
                 start_date = request.POST.get('start_date', '')
                 end_date = request.POST.get('end_date', '')
-                queryset = Sale.objects.filter(is_electronicinvoice=True)
+                queryset = Sale.objects.filter(is_electronicinvoice=True).annotate(n_payments=Count('salecreditpayment'))
                 if len(start_date) and len(end_date):
                     queryset = queryset.filter(date_joined__range=[start_date, end_date])
                 for i in queryset.order_by('-id'):
-                    data.append(i.toJSON())
+                    item = i.toJSON()
+                    item['validated'] = salefe_service.is_validated(i)
+                    # Se edita solo mientras no esté validada ni tenga abonos
+                    item['editable'] = not item['validated'] and not i.n_payments
+                    data.append(item)
+            elif action == 'validate':
+                if not request.user.has_perm('pos.validate_electronic_invoice'):
+                    return JsonResponse({'error': 'No tiene permiso para validar facturas electrónicas.'}, status=403)
+                result = salefe_service.validate_sale(request.POST.get('id'), request=request)
+                data = {'success': True, 'number': result['number'], 'warnings': result['warnings'],
+                        'message': f'Factura validada por la DIAN: N° {result["number"]}'}
+            elif action == 'radian_events':
+                if not request.user.has_perm('pos.radian_electronic_invoice'):
+                    return JsonResponse({'error': 'No tiene permiso para consultar eventos RADIAN.'}, status=403)
+                data = salefe_service.radian_events(salefe_service.get_fe_sale(request.POST.get('id')))
+            elif action == 'radian_tacit':
+                if not request.user.has_perm('pos.radian_electronic_invoice'):
+                    return JsonResponse({'error': 'No tiene permiso para registrar eventos RADIAN.'}, status=403)
+                person = {key: request.POST.get(key, '') for key in (
+                    'identification_document_code', 'identification', 'dv', 'first_name', 'last_name', 'job_title',
+                    'organization_department')}
+                data = salefe_service.register_tacit_acceptance(salefe_service.get_fe_sale(request.POST.get('id')), person)
+                data['message'] = 'La aceptación tácita quedó registrada.'
             elif action == 'search_detail_products':
                 data = []
                 for i in SaleDetail.objects.filter(sale_id=request.POST.get('id')):
@@ -92,6 +118,12 @@ class SaleFeListView(GroupPermissionMixin, FormView):
         context['create_url'] = reverse_lazy('sale_Fe_admin_create')
         context['module_name'] = MODULE_NAME
         context['sale_form'] = SaleForm()
+        user = self.request.user
+        context['can'] = {
+            'edit': user.has_perm('pos.change_electronic_invoice'),
+            'validate': user.has_perm('pos.validate_electronic_invoice'),
+            'radian': user.has_perm('pos.radian_electronic_invoice'),
+        }
         return context
 
 
@@ -137,160 +169,10 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
         data = {}
         try:
             if action == 'add':
-                # La venta local debe confirmarse antes de interactuar con servicios
-                # externos. Así, una caída de Factus o del correo no la revierte.
-                with transaction.atomic():
-                    company = Company.objects.first()
-                    iva = float(company.iva) / 100 if company and company.iva else 0.0
-
-                    sale = Sale()
-                    sale.company = company
-                    sale.employee_id = request.user.id
-                    sale.client_id = int(request.POST.get('client'))
-                    sale.iva = iva
-                    sale.dscto = float(request.POST.get('dscto', 0) or 0) / 100
-                    sale.cash = float(request.POST.get('cash', 0) or 0)
-                    sale.change = float(request.POST.get('change', 0) or 0)
-                    sale.paymentmethod = request.POST.get('paymentmethod')
-
-                    if sale.paymentmethod == 'transfer':
-                        sale.transfermethods = request.POST.get('transfermethods')
-                    elif sale.paymentmethod == 'mixto':
-                        sale.nequi_value = float(request.POST.get('nequi_value', 0) or 0)
-                        sale.daviplata_value = float(request.POST.get('daviplata_value', 0) or 0)
-                    else:
-                        sale.transfermethods = None
-
-                    sale.typemethods = request.POST.get('typemethods')
-                    if sale.typemethods == 'credit':
-                        sale.expiration_date = request.POST.get('expiration_date')
-                    else:
-                        sale.expiration_date = None
-
-                    sale.service_type = request.POST.get('service_type')
-                    sale.propina = float(request.POST.get('propina', 0) or 0)
-                    sale.description = request.POST.get('description', '').strip()
-                    sale.is_electronicinvoice = True
-                    sale.factus_status = 'pending'
-                    sale.save()
-
-                    # Guardar detalles de productos
-                    for i in json.loads(request.POST.get('products', '[]')):
-                        product = Product.objects.get(pk=i['id'])
-                        detail = SaleDetail()
-                        detail.sale_id = sale.id
-                        detail.product_id = product.id
-                        detail.cost = product.cost_per_sale_unit()
-                        qty = parse_quantity(i['cant'], product)
-                        detail.cant = qty
-                        detail.price = float(i['pvp'])
-                        detail.dscto = float(i['dscto']) / 100
-                        detail.save()
-
-                        # Descuento de stock
-                        detail.product.stock -= detail.cant
-                        detail.product.save()
-
-                        # Manejo de productos automáticos
-                        auto_products = ProductAutoAdd.objects.filter(trigger_product=product)
-                        for auto in auto_products:
-                            auto_product = auto.auto_product
-                            auto_product.stock -= auto.quantity * qty
-                            auto_product.save()
-
-                    # Recalcular totales de factura
-                    sale.calculate_detail()
-                    sale.calculate_invoice()
-
-                    # Guardar el adjunto junto con la venta local, antes de salir
-                    # de la transacción que confirma venta, detalle e inventario.
-                    files_list = request.FILES.getlist('pdf_files')
-                    if files_list:
-                        sale.attachment = files_list[0]
-                        sale.save(update_fields=['attachment'])
-
-                # Desde este punto la venta ya está confirmada en la base local.
-                data = {
-                    'print_url': str(reverse_lazy('sale_Fe_admin_print_invoice', kwargs={'pk': sale.id})),
-                    'warnings': [],
-                }
-                target_email = request.POST.get('client_email', '')
-
-                try:
-                    numbering_range_id = request.POST.get('numbering_range_id')
-                    numbering_range_id = int(numbering_range_id) if numbering_range_id else 8
-                    factus_response = create_invoice(
-                        sale,
-                        numbering_range_id=numbering_range_id,
-                        target_email=target_email,
-                    )
-                    if 'error' in factus_response:
-                        raise ValidationError(factus_response.get('error'))
-
-                    data_resp = factus_response.get('data', {})
-                    # Factus v2 retorna los datos de la factura directamente en
-                    # ``data``. Se conserva el fallback para respuestas antiguas.
-                    bill_data = data_resp.get('bill', data_resp)
-                    numbering_range = data_resp.get('numbering_range', {})
-                    if not bill_data or not bill_data.get('number'):
-                        raise ValidationError('Factus no devolvió los datos de la factura creada')
-                except Exception:
-                    logger.exception('No se pudo facturar la venta local %s en Factus', sale.id)
-                    sale.factus_status = 'error'
-                    sale.save(update_fields=['factus_status'])
-                    data['warnings'].append(
-                        'La venta se guardó, pero no se pudo enviar a Factus. Revise los registros para reintentarla.'
-                    )
-                else:
-                    try:
-                        # La actualización de datos de Factus se confirma antes
-                        # de intentar el correo, para que este nunca dependa de
-                        # Gmail ni deje datos de Factus sin persistir.
-                        with transaction.atomic():
-                            links_data = bill_data.get('links', {})
-                            sale.factus_invoice_id = bill_data.get('number')
-                            sale.factus_status = bill_data.get('status') or (
-                                'validated' if bill_data.get('is_validated') else 'pending'
-                            )
-                            sale.factus_pdf_url = links_data.get('public_url')
-                            sale.factus_cufe = bill_data.get('cufe')
-                            sale.factus_resolution = numbering_range.get('resolution_number')
-                            sale.factus_prefix = numbering_range.get('prefix')
-                            sale.factus_range_from = numbering_range.get('from')
-                            sale.factus_range_to = numbering_range.get('to')
-                            sale.factus_date_from = numbering_range.get('date_from')
-                            sale.factus_date_to = numbering_range.get('date_to')
-                            sale.factus_qr_url = links_data.get('qr')
-                            sale.save()
-                    except Exception:
-                        logger.exception(
-                            'Factus creó la factura de la venta %s, pero no se pudo guardar su respuesta localmente',
-                            sale.id,
-                        )
-                        data['warnings'].append(
-                            'La venta se guardó y Factus respondió, pero no se pudieron guardar sus datos localmente. Revise los registros.'
-                        )
-                    else:
-                        # El servicio captura sus propios errores, pero se protege
-                        # también esta llamada para que Gmail jamás revierta la venta.
-                        try:
-                            email_result = send_sale_electronic_invoice_email(sale, request=request)
-                        except Exception:
-                            logger.exception('Error inesperado al enviar el correo de la factura %s', sale.id)
-                            data['warnings'].append(
-                                'La venta y la factura electrónica se guardaron, pero el correo no pudo enviarse.'
-                            )
-                        else:
-                            if not email_result.get('success'):
-                                logger.warning(
-                                    'No se pudo enviar el correo de la factura %s: %s',
-                                    sale.id,
-                                    email_result.get('message'),
-                                )
-                                data['warnings'].append(
-                                    'La venta y la factura electrónica se guardaron, pero el correo no pudo enviarse.'
-                                )
-
+                # «Guardar» registra la factura SOLO en la base local. Se envía a Factus después, con «Validar».
+                sale = salefe_service.save_from_request(request)
+                data = {'print_url': str(reverse_lazy('sale_Fe_admin_print_invoice', kwargs={'pk': sale.id})), 'id': sale.id,
+                        'warnings': []}
             elif action == 'search_products':
                 ids = json.loads(request.POST.get('ids', '[]'))
                 data = []
@@ -329,6 +211,20 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
             elif action == 'create_client':
                 form = ClientForm(self.request.POST)
                 data = form.save()
+            elif action == 'numbering_preview':
+                # Resolución, rango y consecutivo que sigue, solo para mostrarlos (no reserva ni consume nada en Factus)
+                active = get_active_numbering_range()
+                if 'error' in active:
+                    data = {'range': None, 'error': active['error']}
+                else:
+                    current = active.get('current') or 0
+                    data = {'range': {
+                        'id': active.get('id'), 'prefix': active.get('prefix') or '', 'from': active.get('from'), 'to': active.get('to'),
+                        'current': current, 'resolution_number': active.get('resolution_number'),
+                        'date_from': active.get('start_date') or active.get('date_from'),
+                        'date_to': active.get('end_date') or active.get('date_to'),
+                        'exhausted': bool(active.get('to') and current and int(current) > int(active['to'])),
+                    }}
             elif action == 'test_numbering_ranges':
                 ranges_response = get_numbering_ranges()
                 data = ranges_response
@@ -351,43 +247,93 @@ class SaleFeCreateView(GroupPermissionMixin, CreateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        
-        try:
-            response_data = get_numbering_ranges()
-            ranges = response_data.get('data', {}).get('data', [])
-            
-            active_range = next((r for r in ranges if r.get('document') == 'Factura de Venta' and r.get('is_active')), {})
-            
-            prefix = active_range.get('prefix')
-            from_num = active_range.get('from', 0)
-            to_num = active_range.get('to', 0)
-            
-            if prefix and str(prefix).strip():
-                context['factus_range_text'] = f"{prefix} ({from_num} - {to_num})"
-            else:
-                context['factus_range_text'] = f"({from_num} - {to_num})"
-                
-            context['factus_current'] = active_range.get('current', 1)
-            # Pasamos el ID real obtenido de la API al contexto para asignarlo al campo oculto
-            context['factus_range_id'] = active_range.get('id', 8)
-            templates_dict = {
-                t.code: t.content 
-                for t in ObservationTemplate.objects.filter(is_active=True)
-            }
-            context['observation_templates'] = templates_dict
-        except Exception as e:
-            print("ERROR OBTENIENDO RANGOS FACTUS:", str(e))
-            context['factus_range_text'] = "(0 - 0)"
-            context['factus_current'] = "1"
-            context['factus_range_id'] = 8
-
+        company = Company.objects.first()
+        context['observation_templates'] = {t.code: t.content for t in ObservationTemplate.objects.filter(is_active=True)}
         context['frmClient'] = ClientForm()
         context['list_url'] = self.success_url
         context['title'] = 'Nuevo registro de una Venta Electrónica'
         context['action'] = 'add'
-        context['company'] = Company.objects.first()
+        context['company'] = company
+        # Datos reales de la compañía para la previsualización (nada escrito a mano en la pantalla)
+        context['company_info'] = {
+            'name': company.name, 'nit': company.ruc, 'address': company.address, 'mobile': company.mobile,
+            'phone': company.phone, 'email': company.email, 'website': company.website,
+            'logo': company.get_image_url() if company.image else '',
+        } if company else {}
         context['final_consumer'] = self.get_final_consumer()
         context['module_name'] = MODULE_NAME
+        return context
+
+
+class SaleFeUpdateView(SaleFeCreateView):
+    """Edita una factura electrónica que todavía NO fue validada (cliente, valores, cantidades, pago...)."""
+    permission_required = 'pos.change_electronic_invoice'
+
+    def dispatch(self, request, *args, **kwargs):
+        self.sale = get_object_or_404(Sale, pk=kwargs['pk'], is_electronicinvoice=True)
+        return super().dispatch(request, *args, **kwargs)
+
+    def get(self, request, *args, **kwargs):
+        # Primero el permiso (el mismo criterio de la pantalla de crear) y después el estado de la factura
+        if not request.user.is_superuser:
+            group = request.session.get('group')
+            if not group or not all(self.has_permission(group, perm) for perm in self.get_permissions()):
+                messages.error(request, 'Tu perfil no cuenta con el permiso necesario para ingresar')
+                return HttpResponseRedirect(self.get_last_url())
+        try:
+            salefe_service.check_can_edit(self.sale)
+        except salefe_service.SaleFeError as e:
+            return HttpResponse(
+                f'<html><body style="font-family:sans-serif;max-width:560px;margin:60px auto">'
+                f'<h3>No se puede editar esta factura</h3><p>{e}</p><p><a href="{self.success_url}">Volver al listado</a></p>'
+                f'</body></html>', status=409)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        if request.POST.get('action', '') != 'edit':
+            return super().post(request, *args, **kwargs)   # búsqueda de productos y clientes, crear cliente...
+        # GroupPermissionMixin solo revisa el permiso al abrir la pantalla; guardar cambios también lo exige.
+        if not request.user.has_perm('pos.change_electronic_invoice'):
+            return JsonResponse({'error': 'No tiene permiso para editar facturas electrónicas.'}, status=403)
+        data = {}
+        try:
+            sale = salefe_service.save_from_request(request, sale=self.sale)
+            data = {'print_url': str(reverse_lazy('sale_Fe_admin_print_invoice', kwargs={'pk': sale.id})), 'id': sale.id,
+                    'warnings': []}
+        except Exception as e:
+            data['error'] = str(e)
+        return HttpResponse(json.dumps(data), content_type='application/json')
+
+    def sale_payload(self):
+        """La factura tal como la necesita el formulario para cargarla (sin tocar nada de Factus)."""
+        sale = self.sale
+        lines = []
+        for d in sale.saledetail_set.select_related('product').order_by('id'):
+            item = d.product.toJSON()
+            item.update({'short_name': d.product.get_short_name(), 'cant': float(d.cant), 'pvp': float(d.price),
+                         'dscto': float(d.dscto) * 100, 'value': d.product.get_full_name()})
+            lines.append(item)
+        client = sale.client
+        return {
+            'id': sale.id,
+            # Todos los datos del cliente (documento, dirección, municipio...): la previsualización los muestra
+            'client': {**client.toJSON(), 'id': client.id, 'text': client.get_full_name(), 'email': client.email or ''},
+            'date_joined': sale.date_joined.strftime('%Y-%m-%d'),
+            'paymentmethod': sale.paymentmethod, 'transfermethods': sale.transfermethods,
+            'typemethods': sale.typemethods, 'service_type': sale.service_type,
+            'expiration_date': sale.expiration_date.strftime('%Y-%m-%d') if sale.expiration_date else '',
+            'dscto': float(sale.dscto) * 100, 'cash': float(sale.cash or 0), 'change': float(sale.change or 0),
+            'propina': float(sale.propina or 0), 'nequi_value': float(sale.nequi_value or 0),
+            'daviplata_value': float(sale.daviplata_value or 0), 'description': sale.description or '',
+            'attachment': sale.attachment.name.split('/')[-1] if sale.attachment else '',
+            'products': lines,
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['title'] = f'Edición de la Venta Electrónica #{self.sale.id}'
+        context['action'] = 'edit'
+        context['edit_sale'] = self.sale_payload()
         return context
 
 

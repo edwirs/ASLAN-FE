@@ -364,7 +364,8 @@
   <script src="{% static 'lib/bootstrap-daterangepicker-3.1/js/moment-with-locales.js' %}"></script>
   <!-- utils -->
   <script src="{% static 'js/main.js' %}"></script>
-  <script src="{% static 'js/functions.js' %}"></script>
+  {# El número de versión obliga al navegador a bajar el archivo nuevo: súbalo cada vez que cambie functions.js #}
+  <script src="{% static 'js/functions.js' %}?v=20261112"></script>
   <script src="{% static 'js/theme.js' %}"></script>
   <!-- REQUIRED SCRIPTS -->
 

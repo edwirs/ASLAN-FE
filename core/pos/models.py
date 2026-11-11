@@ -495,6 +495,11 @@ class Sale(models.Model):
     def get_full_subtotal(self):
         return float(self.subtotal_0) + float(self.subtotal_12)
 
+    def get_total_discounts(self):
+        """Todos los descuentos de la venta: los de cada línea más el global."""
+        lines = self.saledetail_set.aggregate(result=Coalesce(Sum('total_dscto'), 0.00, output_field=FloatField())).get('result')
+        return float(lines) + float(self.total_dscto)
+
     def calculate_invoice(self):
         self.subtotal_0 = float(self.saledetail_set.filter(product__with_tax=False).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))
         self.subtotal_12 = float(self.saledetail_set.filter(product__with_tax=True).aggregate(result=Coalesce(Sum('total'), 0.00, output_field=FloatField())).get('result'))

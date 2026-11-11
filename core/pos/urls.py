@@ -75,6 +75,7 @@ urlpatterns = [
     # sale factura electronica
     path('salefe/admin/', SaleFeListView.as_view(), name='sale_Fe_admin_list'),
     path('salefe/admin/add/', SaleFeCreateView.as_view(), name='sale_Fe_admin_create'),
+    path('salefe/admin/update/<int:pk>/', SaleFeUpdateView.as_view(), name='sale_Fe_admin_update'),
     path('salefe/admin/delete/<int:pk>/', SaleFeDeleteView.as_view(), name='sale_Fe_admin_delete'),
     path('salefe/admin/delivered/<int:pk>/', SaleFeDeliveredUpdateView.as_view(), name='sale_Fe_admin_delivered'),
     path('salefe/admin/print/invoice/<int:pk>/', SaleFePrintInvoiceView.as_view(), name='sale_Fe_admin_print_invoice'),

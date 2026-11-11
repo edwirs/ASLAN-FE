@@ -4,6 +4,8 @@ var select_paymentmethod;
 var select_transfermethods;
 var select_service_type;
 var input_cash, input_change;
+var CAN = {edit: false, validate: false, radian: false};
+try { CAN = JSON.parse(document.getElementById('can-data').textContent); } catch (e) { /* sin permisos extra */ }
 
 var sale = {
     list: function (all) {
@@ -60,9 +62,9 @@ var sale = {
                         if (row.factus_cufe) {
                             dianIcon = '<span class="status-chip status-success" data-bs-toggle="tooltip" title="Validada por la DIAN"><i class="fas fa-check"></i></span>';
                         } else if (row.factus_status === 'error') {
-                            dianIcon = '<span class="status-chip status-danger" data-bs-toggle="tooltip" title="Rechazada por Factus / DIAN"><i class="fas fa-times"></i></span>';
+                            dianIcon = '<span class="status-chip status-danger" data-bs-toggle="tooltip" title="El último intento de validación falló. Puede editarla y volver a validarla"><i class="fas fa-times"></i></span>';
                         } else {
-                            dianIcon = '<span class="status-chip status-warning" data-bs-toggle="tooltip" title="Pendiente de validación"><i class="fas fa-clock"></i></span>';
+                            dianIcon = '<span class="status-chip status-warning" data-bs-toggle="tooltip" title="Guardada en el sistema. Aún no se ha enviado a la DIAN (use «Validar»)"><i class="fas fa-clock"></i></span>';
                         }
 
                         var sentCount = parseInt(row.email_sent_count) || 0;
@@ -82,14 +84,28 @@ var sale = {
                     targets: [-1],
                     class: 'text-center',
                     render: function (data, type, row) {
-                        var buttons = '<div class="dropdown d-inline-block">';
+                        var validated = !!row.validated;
+                        var buttons = '<div class="d-inline-flex align-items-center gap-2">';
+                        // Facturas que aún no se han enviado a la DIAN: botón «Validar» al lado de los 3 puntos
+                        if (!validated && CAN.validate) {
+                            buttons += '<button type="button" class="btn btn-success btn-validate" rel="validate" data-id="' + row.id + '" title="Enviar esta factura a la DIAN por Factus"><i class="fas fa-paper-plane"></i> Validar</button>';
+                        }
+                        buttons += '<div class="dropdown d-inline-block">';
                         buttons += '<button class="btn btn-actions-dots" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fas fa-ellipsis-h"></i></button>';
                         buttons += '<ul class="dropdown-menu dropdown-menu-end actions-dropdown-menu">';
-                        buttons += '<li><a class="dropdown-item" href="#" rel="print" data-id="' + row.id + '"><i class="fas fa-print text-secondary"></i>Imprimir</a></li>';
-                        buttons += '<li><a class="dropdown-item" href="#" rel="view_invoice" data-url="' + (row.factus_pdf_url || '') + '"><i class="fas fa-eye text-info"></i>Ver factura</a></li>';
-                        buttons += '<li><a class="dropdown-item" href="#" rel="resend_email" data-id="' + row.id + '"><i class="fas fa-envelope text-primary"></i>Enviar factura al correo</a></li>';
-                        buttons += '<li><a class="dropdown-item" href="#" rel="download_pdf" data-id="' + row.id + '"><i class="fas fa-file-pdf text-danger"></i>Descargar PDF</a></li>';
-                        buttons += '</ul></div>';
+                        if (row.editable && CAN.edit) {
+                            buttons += '<li><a class="dropdown-item" href="' + pathname + 'update/' + row.id + '/"><i class="fas fa-edit text-warning"></i>Editar</a></li>';
+                        }
+                        if (validated) {
+                            buttons += '<li><a class="dropdown-item" href="#" rel="print" data-id="' + row.id + '"><i class="fas fa-print text-secondary"></i>Imprimir</a></li>';
+                            buttons += '<li><a class="dropdown-item" href="#" rel="view_invoice" data-url="' + (row.factus_pdf_url || '') + '"><i class="fas fa-eye text-info"></i>Ver factura</a></li>';
+                            buttons += '<li><a class="dropdown-item" href="#" rel="resend_email" data-id="' + row.id + '"><i class="fas fa-envelope text-primary"></i>Enviar factura al correo</a></li>';
+                            buttons += '<li><a class="dropdown-item" href="#" rel="download_pdf" data-id="' + row.id + '"><i class="fas fa-file-pdf text-danger"></i>Descargar PDF</a></li>';
+                            if (CAN.radian) {
+                                buttons += '<li><a class="dropdown-item" href="#" rel="radian" data-id="' + row.id + '" data-number="' + (row.factus_invoice_id || '') + '"><i class="fas fa-shield-halved text-success"></i>Eventos RADIAN</a></li>';
+                            }
+                        }
+                        buttons += '</ul></div></div>';
 
                         return buttons;
                     }
@@ -106,7 +122,144 @@ var sale = {
     }
 };
 
+var radian = {
+    saleId: null,
+    esc: function (t) { return $('<div>').text(t === null || t === undefined ? '' : t).html(); },
+
+    open: function (id, number) {
+        var self = this;
+        self.saleId = id;
+        $('#radianNumber').text(number ? 'Factura ' + number : '');
+        $('#radianLoading').show();
+        $('#radianError').hide();
+        $('#radianContent').hide();
+        $('#modalRadian').modal('show');
+        $.ajax({
+            url: pathname, type: 'POST', dataType: 'json', timeout: 40000,
+            headers: {'X-CSRFToken': csrftoken},
+            data: {action: 'radian_events', id: id},
+            success: function (data) {
+                $('#radianLoading').hide();
+                if (data.error) {
+                    return $('#radianError').text(data.error).show();
+                }
+                self.render(data);
+            },
+            error: function () {
+                $('#radianLoading').hide();
+                $('#radianError').text('No fue posible consultar a Factus. Intente de nuevo en unos minutos.').show();
+            }
+        });
+    },
+
+    // Los 5 eventos RADIAN, en el orden del tablero
+    STEPS: [
+        ['030', 'Acuse de recibo de Factura Electrónica de Venta'],
+        ['032', 'Recibo del bien o prestación del servicio'],
+        ['031', 'Reclamo de la Factura Electrónica de Venta'],
+        ['033', 'Aceptación expresa'],
+        ['034', 'Aceptación tácita']
+    ],
+
+    money: function (n) { return '$' + (parseFloat(n) || 0).toLocaleString('es-CO', {minimumFractionDigits: 2, maximumFractionDigits: 2}); },
+
+    render: function (data) {
+        var self = this;
+        var inv = data.invoice || {};
+        $('#radianDni').text(inv.dni || '—');
+        $('#radianClient').text(inv.client || '—');
+        $('#radianDate').text(inv.date || '—');
+        $('#radianForm').text(inv.payment_form || '—');
+        $('#radianMethod').text(inv.payment_method || '—');
+        $('#radianDue').text(inv.due_date || '');
+        $('#radianDueRow').toggle(!!inv.due_date);
+        $('#radianTotal').text(self.money(inv.total));
+        $('#radianCufe').text(inv.cufe ? 'CUFE: ' + inv.cufe : '').toggle(!!inv.cufe);
+        $('#radianTitleValue').toggle(!!data.title_value);
+        $('#radianNoTitle').toggle(!data.title_value);
+
+        var colors = {accepted: 'bg-success', claim: 'bg-danger', received: 'bg-info', none: 'bg-secondary'};
+        $('#radianBadge').attr('class', 'badge ' + (colors[data.summary.level] || 'bg-secondary')).text(data.summary.label);
+
+        var byCode = {};
+        data.events.forEach(function (e) { if (!byCode[e.code]) { byCode[e.code] = e; } });
+        var $board = $('#radianBoard').empty();
+        self.STEPS.forEach(function (step) {
+            var code = step[0], event = byCode[code];
+            var done = !!event;
+            var iconColor = done ? (code === '031' ? 'text-danger' : 'text-success') : 'pending';
+            var when = done ? self.esc(event.time || '') + '<br>' + self.esc(event.date || '') : '';
+            var canEmit = code === '034' && !!data.can_tacit;
+            var why = code !== '034' ? 'Este evento lo emite el cliente (el adquirente)'
+                : (!data.is_credit ? 'La aceptación tácita solo aplica a facturas a crédito' : (done ? 'Ya está emitida' : 'La factura ya tiene una aceptación'));
+            $board.append(
+                '<div class="radian-step" data-code="' + code + '">' +
+                '<div class="radian-step-name">' + self.esc(step[1]) + '</div>' +
+                '<div class="radian-step-when">' + when + '</div>' +
+                '<div class="radian-step-icon ' + iconColor + '"><i class="far fa-circle-check"></i></div>' +
+                '<span ' + (canEmit ? '' : 'title="' + self.esc(why) + '"') + '><button type="button" class="btn btn-primary btn-sm radian-emit" data-code="' + code + '" ' +
+                (canEmit ? '' : 'disabled') + '>Emitir</button></span></div>');
+        });
+        // El formulario de aceptación tácita se abre con «Emitir»; al refrescar vuelve a quedar cerrado
+        $('#radianTacit').hide();
+        $('#radianContent').show();
+    },
+
+    openTacit: function () {
+        try {
+            var saved = JSON.parse(localStorage.getItem('aslan-radian-person') || '{}');
+            $('#tacitDocType').val(saved.type || '13'); $('#tacitId').val(saved.id || ''); $('#tacitDv').val(saved.dv || '');
+            $('#tacitFirst').val(saved.first || ''); $('#tacitLast').val(saved.last || '');
+            $('#tacitJob').val(saved.job || ''); $('#tacitDept').val(saved.dept || '');
+        } catch (e) { /* sin almacenamiento */ }
+        $('#radianTacit').show();
+        $('#tacitId').trigger('focus');
+    },
+
+    registerTacit: function () {
+        var self = this;
+        var person = {
+            identification_document_code: $('#tacitDocType').val(), identification: $.trim($('#tacitId').val()), dv: $.trim($('#tacitDv').val()),
+            first_name: $.trim($('#tacitFirst').val()), last_name: $.trim($('#tacitLast').val()),
+            job_title: $.trim($('#tacitJob').val()), organization_department: $.trim($('#tacitDept').val())
+        };
+        if (!person.identification || !person.first_name || !person.last_name) {
+            return message_error('Escriba el número de documento, los nombres y los apellidos de quien registra el evento');
+        }
+        try {
+            localStorage.setItem('aslan-radian-person', JSON.stringify({type: person.identification_document_code, id: person.identification,
+                dv: person.dv, first: person.first_name, last: person.last_name, job: person.job_title, dept: person.organization_department}));
+        } catch (e) { /* sin almacenamiento */ }
+        dialog_action({
+            'content': '¿Registrar la aceptación tácita de esta factura ante la DIAN? Esta acción no se puede deshacer.',
+            'success': function () {
+                $('#btnRadianTacit').prop('disabled', true);
+                $.ajax({
+                    url: pathname, type: 'POST', dataType: 'json', timeout: 60000,
+                    headers: {'X-CSRFToken': csrftoken},
+                    data: $.extend({action: 'radian_tacit', id: self.saleId}, person),
+                    success: function (data) {
+                        $('#btnRadianTacit').prop('disabled', false);
+                        if (data.error) {
+                            return Swal.fire({icon: 'error', title: 'No se pudo registrar el evento', text: data.error});
+                        }
+                        toastr.success(data.message);
+                        self.render(data);
+                    },
+                    error: function () {
+                        $('#btnRadianTacit').prop('disabled', false);
+                        Swal.fire({icon: 'error', title: 'No se pudo registrar el evento', text: 'No hubo respuesta del servidor.'});
+                    }
+                });
+            },
+            'cancel': function () {}
+        });
+    }
+};
+
 $(function () {
+    $('#btnRadianTacit').on('click', function () { radian.registerTacit(); });
+    $('#radianBoard').on('click', '.radian-emit', function () { if ($(this).data('code') === '034') { radian.openTacit(); } });
     input_date_range = $('input[name="date_range"]');
     select_paymentmethod = $('select[name="paymentmethod"]');
     select_transfermethods = $('select[name="transfermethods"]');
@@ -143,6 +296,48 @@ $(function () {
                     }
                 }
             });
+        })
+        .on('click', 'button[rel="validate"]', function (e) {
+            e.preventDefault();
+            $('.tooltip').remove();
+            var $btn = $(this);
+            var id = $btn.data('id');
+            var row = tblSale.rows().data().toArray().filter(function (r) { return r.id === id; })[0] || {};
+            var who = (row.client && row.client.names) ? row.client.names : 'el cliente';
+            dialog_action({
+                'content': '¿Validar la factura #' + id + ' de ' + $('<div>').text(who).html() + ' por $' + parseFloat(row.total || 0).toLocaleString('es-CL') +
+                    '? Se enviará a la DIAN y, una vez validada, ya no podrá editarse ni eliminarse.',
+                'success': function () {
+                    $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i> Validando...');
+                    $.ajax({
+                        url: pathname, type: 'POST', dataType: 'json', timeout: 90000,
+                        headers: {'X-CSRFToken': csrftoken},
+                        data: {action: 'validate', id: id},
+                        success: function (data) {
+                            if (data.error) {
+                                $btn.prop('disabled', false).html('<i class="fas fa-paper-plane"></i> Validar');
+                                Swal.fire({icon: 'error', title: 'No se pudo validar la factura', text: data.error});
+                                return;
+                            }
+                            toastr.success(data.message);
+                            (data.warnings || []).forEach(function (w) { toastr.warning(w); });
+                            sale.list(false);
+                        },
+                        error: function () {
+                            $btn.prop('disabled', false).html('<i class="fas fa-paper-plane"></i> Validar');
+                            Swal.fire({icon: 'error', title: 'No se pudo validar la factura',
+                                       text: 'No hubo respuesta del servidor. Revise el listado antes de reintentar: la factura pudo haberse validado.'});
+                            sale.list(false);
+                        }
+                    });
+                },
+                'cancel': function () {}
+            });
+        })
+        .on('click', 'a[rel="radian"]', function (e) {
+            e.preventDefault();
+            $('.tooltip').remove();
+            radian.open($(this).data('id'), $(this).data('number'));
         })
         .on('click', 'a[rel="print"]', function (e) {
             e.preventDefault();

@@ -264,7 +264,7 @@
             </form>
         </div>
     </div>
-    <script src="{% static 'sale/admin/js/form.js' %}"></script>
+    <script src="{% static 'sale/admin/js/form.js' %}?v=20261112"></script>
     <script type="application/javascript">
         sale.detail.iva = {{ company.iva|safe }};
         sale.canEditPrice = {{ perms.pos.edit_sale_price|yesno:'true,false' }};

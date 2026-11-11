@@ -65,14 +65,14 @@ def _nit_dv(nit):
     return str(residue if residue < 2 else 11 - residue)
 
 
-def _error_response(response, body=None):
+def _error_response(response, body=None, message="Factus rechazó la factura"):
     if body is None:
         try:
             body = response.json()
         except ValueError:
             body = response.text
     logger.warning("Factus rechazó la solicitud (HTTP %s): %s", response.status_code, body)
-    return {"error": "Factus rechazó la factura", "detail": body}
+    return {"error": message, "detail": body}
 
 
 def get_token(config):
@@ -564,4 +564,175 @@ def delete_credit_note(reference_code):
         return {"error": str(exc)}
     except requests.RequestException as exc:
         logger.exception("No fue posible eliminar la nota crédito %s en Factus", reference_code)
+        return {"error": "No fue posible comunicarse con Factus", "detail": str(exc)}
+
+
+# ------------------------------------------------------------------------------------------------
+# Rango de numeración activo
+# ------------------------------------------------------------------------------------------------
+def _plain(text):
+    import unicodedata
+
+    return unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower().strip()
+
+
+def get_active_numbering_range(document="Factura de Venta"):
+    """Rango de numeración activo y vigente para ese tipo de documento, o ``{"error": ...}``.
+
+    Usa ``GET /v2/numbering-ranges`` (solo consulta: no reserva ni consume ningún consecutivo). Devuelve el rango tal
+    como lo entrega Factus: ``id``, ``prefix``, ``from``, ``to``, ``current`` (el PRÓXIMO número a usar),
+    ``resolution_number``, ``start_date``/``end_date`` (o ``date_from``/``date_to``), ``is_expired``...
+    """
+    response = get_numbering_ranges()
+    if "error" in response:
+        return response
+    data = response.get("data")
+    ranges = data if isinstance(data, list) else ((data or {}).get("data") or [])
+    accepted = {_plain(document), "factura electronica de venta", "factura de venta"}
+    candidates = [r for r in ranges if _plain(r.get("document")) in accepted and r.get("is_active") and not r.get("deleted_at")]
+    if not candidates:
+        return {"error": f"No hay un rango de numeración activo para «{document}» en Factus."}
+    valid = [r for r in candidates if not r.get("is_expired")]
+    if not valid:
+        return {"error": "El rango de numeración activo de Factus está vencido. Renueve la resolución de facturación."}
+    return valid[0]
+
+
+# ------------------------------------------------------------------------------------------------
+# RADIAN: eventos de una factura emitida
+# ------------------------------------------------------------------------------------------------
+# Códigos de la «Tabla de eventos RADIAN» de la documentación de Factus.
+RADIAN_EVENTS = {
+    "030": "Acuse de recibo de la factura",
+    "031": "Reclamo de la factura",
+    "032": "Recibo del bien o prestación del servicio",
+    "033": "Aceptación expresa",
+    "034": "Aceptación tácita",
+}
+RADIAN_TACIT_ACCEPTANCE = "034"
+
+
+def _event_list(body):
+    """La lista de eventos, venga como arreglo, en ``data`` o en ``data.data``."""
+    if isinstance(body, list):
+        return body
+    if isinstance(body, dict):
+        data = body.get("data")
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            inner = data.get("data")
+            if isinstance(inner, list):
+                return inner
+            if isinstance(data.get("events"), list):
+                return data["events"]
+        if isinstance(body.get("events"), list):
+            return body["events"]
+    return []
+
+
+def get_radian_events(number):
+    """Eventos RADIAN de una factura (``GET /v2/bills/:number/radian/events``).
+
+    Devuelve ``{"events": [...]}`` con cada evento normalizado (``code``, ``name``, ``number``, ``cude``,
+    ``date``, ``time``) o ``{"error": ...}``.
+    """
+    try:
+        config = _get_active_config()
+        response = requests.get(
+            f"{config.api_url}/v2/bills/{number}/radian/events",
+            headers={"Authorization": f"Bearer {get_token(config)}", "Accept": "application/json"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        try:
+            body = response.json()
+        except ValueError:
+            body = None
+        if not response.ok:
+            return _error_response(response, body, "Factus no pudo entregar los eventos RADIAN")
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
+    except (requests.RequestException, KeyError) as exc:
+        logger.exception("No fue posible consultar los eventos RADIAN de la factura %s", number)
+        return {"error": "No fue posible consultar los eventos RADIAN en Factus", "detail": str(exc)}
+
+    events = []
+    for raw in _event_list(body):
+        if not isinstance(raw, dict):
+            continue
+        code = str(raw.get("event_code") or raw.get("code") or "").strip().zfill(3) if (raw.get("event_code") or raw.get("code")) else ""
+        events.append({
+            "code": code,
+            "name": raw.get("event_name") or RADIAN_EVENTS.get(code, ""),
+            "number": raw.get("number") or "",
+            "cude": raw.get("cude") or "",
+            "date": raw.get("effective_date") or "",
+            "time": raw.get("effective_time") or "",
+        })
+    return {"events": events}
+
+
+def radian_summary(events):
+    """Estado resumido de una factura según sus eventos RADIAN: ``{"level", "label", "codes"}``.
+
+    ``level``: accepted (033/034), claim (031), received (030/032) o none (sin eventos). El pago de la factura no
+    es un evento que Factus exponga, así que no se puede saber si fue pagada.
+    """
+    codes = {e.get("code") for e in events}
+    if "033" in codes:
+        label, level = "Aceptada expresamente", "accepted"
+    elif "034" in codes:
+        label, level = "Aceptada tácitamente", "accepted"
+    elif "031" in codes:
+        label, level = "Con reclamo", "claim"
+    elif "032" in codes:
+        label, level = "Bien o servicio recibido", "received"
+    elif "030" in codes:
+        label, level = "Acuse de recibo", "received"
+    else:
+        label, level = "Sin eventos del adquirente", "none"
+    return {"level": level, "label": label, "codes": sorted(c for c in codes if c)}
+
+
+def create_tacit_acceptance(number, person):
+    """Registra la aceptación tácita (evento 034) de una factura a crédito
+    (``POST /v2/bills/:number/radian/events/034``). ``person``: quien registra el evento.
+
+    Campos de ``person``: ``identification_document_code``, ``identification``, ``first_name``, ``last_name`` y,
+    opcionales, ``dv``, ``job_title``, ``organization_department``.
+    """
+    payload = {
+        "identification_document_code": str(person.get("identification_document_code", "")).strip(),
+        "identification": str(person.get("identification", "")).strip(),
+        "dv": str(person.get("dv", "") or "").strip(),
+        "first_name": str(person.get("first_name", "")).strip(),
+        "last_name": str(person.get("last_name", "")).strip(),
+    }
+    for optional in ("job_title", "organization_department"):
+        value = str(person.get(optional, "") or "").strip()
+        if value:
+            payload[optional] = value
+    try:
+        config = _get_active_config()
+        response = requests.post(
+            f"{config.api_url}/v2/bills/{number}/radian/events/{RADIAN_TACIT_ACCEPTANCE}",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {get_token(config)}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            timeout=REQUEST_TIMEOUT,
+        )
+        try:
+            body = response.json()
+        except ValueError:
+            body = response.text
+        if not response.ok or (isinstance(body, dict) and body.get("status") == "Validation error"):
+            return _error_response(response, body, "Factus rechazó el registro de la aceptación tácita")
+        return body if isinstance(body, dict) else {"data": body}
+    except FactusConfigError as exc:
+        return {"error": str(exc)}
+    except (requests.RequestException, KeyError) as exc:
+        logger.exception("No fue posible registrar la aceptación tácita de la factura %s", number)
         return {"error": "No fue posible comunicarse con Factus", "detail": str(exc)}

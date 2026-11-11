@@ -247,11 +247,11 @@
                 <td class="text-center">{{ forloop.counter }}</td>
                 <td class="text-start"><code>{{ detail.product.code }}</code></td>
                 <td class="text-start desc-col">{{ detail.product.name }}</td>
-                <td class="text-end">$ {{ detail.price|floatformat:2|intcomma }}</td>
+                <td class="text-end">$ {{ detail.price|floatformat:"2g" }}</td>
                 <td class="text-center">{{ detail.cant|floatformat:2 }}</td>
-                <td class="text-end">$ {{ detail.dscto|default:"0.00"|floatformat:2|intcomma }}</td>
+                <td class="text-end">$ {{ detail.dscto|default:"0.00"|floatformat:"2g" }}</td>
                 <td class="text-center">{{ detail.get_iva_percent }}%</td>
-                <td class="text-end fw-bold">$ {{ detail.subtotal|floatformat:2|intcomma }}</td>
+                <td class="text-end fw-bold">$ {{ detail.subtotal|floatformat:"2g" }}</td>
             </tr>
             {% endfor %}
         </tbody>
@@ -271,18 +271,18 @@
                     <div class="totals-header">Totales</div>
                     <table class="totals-table">
                         <tr><td>Nro líneas:</td><td class="text-end">{{ sale.saledetail_set.count }}</td></tr>
-                        <tr><td>Valor bruto:</td><td class="text-end">$ {{ sale.subtotal|default:sale.total|floatformat:2|intcomma }}</td></tr>
-                        <tr><td>Base imponible:</td><td class="text-end">$ {{ sale.subtotal_12_sin_iva|default:"0.00"|floatformat:2|intcomma }}</td></tr>
+                        <tr><td>Valor bruto:</td><td class="text-end">$ {{ sale.get_subtotal_without_taxes|floatformat:"2g" }}</td></tr>
+                        <tr><td>Base imponible:</td><td class="text-end">$ {{ sale.subtotal_12_sin_iva|default:"0.00"|floatformat:"2g" }}</td></tr>
                         {% for t in sale.tax_breakdown %}
-                        <tr><td>{{ t.label }}:</td><td class="text-end">$ {{ t.tax|floatformat:2|intcomma }}</td></tr>
+                        <tr><td>{{ t.label }}:</td><td class="text-end">$ {{ t.tax|floatformat:"2g" }}</td></tr>
                         {% empty %}
                         <tr><td>Impuestos:</td><td class="text-end">$ 0,00</td></tr>
                         {% endfor %}
-                        <tr><td>Descuento global (-):</td><td class="text-end">$ 0,00</td></tr>
+                        <tr><td>Descuentos (-):</td><td class="text-end">$ {{ sale.get_total_discounts|floatformat:"2g" }}</td></tr>
                         <tr><td>Recargo global (+):</td><td class="text-end">$ 0,00</td></tr>
                         <tr>
                             <td class="totals-final-row">Total factura:</td>
-                            <td class="text-end totals-final-row">$ {{ sale.total|floatformat:2|intcomma }}</td>
+                            <td class="text-end totals-final-row">$ {{ sale.total|floatformat:"2g" }}</td>
                         </tr>
                     </table>
                 </div>
@@ -310,7 +310,7 @@
                         <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Forma de pago:</strong> {{ payment.payment_form.name }}</p>
                         <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Método de pago:</strong> {{ payment.payment_method.name }}</p>
                         <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Referencia:</strong> {{ payment.reference_code|default:"pago-"|add:sale.id|stringformat:"s" }}</p>
-                        <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Monto:</strong> $ {{ payment.amount|floatformat:2|intcomma }}</p>
+                        <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Monto:</strong> $ {{ payment.amount|floatformat:"2g" }}</p>
                         {% if payment.due_date %}
                             <p style="margin: 0; font-size: 8.5pt;"><strong>Vencimiento:</strong> {{ payment.due_date }}</p>
                         {% endif %}
@@ -318,7 +318,7 @@
                         <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Forma de pago:</strong> {{ sale.get_paymentmethod_display|default:sale.paymentmethod }}</p>
                         <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Medio de pago:</strong> {{ sale.get_typemethods_display|default:sale.typemethods }}</p>
                         <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Referencia:</strong> pago-{{ sale.id }}</p>
-                        <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Monto:</strong> $ {{ sale.total|floatformat:2|intcomma }}</p>
+                        <p style="margin: 0 0 2px 0; font-size: 8.5pt;"><strong>Monto:</strong> $ {{ sale.total|floatformat:"2g" }}</p>
                         {% if sale.expiration_date %}
                             <p style="margin: 0; font-size: 8.5pt;"><strong>Vencimiento:</strong> {{ sale.expiration_date }}</p>
                         {% endif %}

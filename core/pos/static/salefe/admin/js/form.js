@@ -7,6 +7,12 @@ var tblProducts, tblSearchProducts;
 var expiration_date;
 var input_search_product, input_birthdate, input_date_joined, input_cash, input_change;
 var input_propina, input_nequi_value, input_daviplata_value;
+var selectedClient = null;   // datos completos del cliente elegido (los usa la previsualización)
+
+// Formato de dinero de las casillas de totales: miles con punto y hasta 2 decimales (302.800 · 1.234,5)
+function fmtMoney(n) {
+    return (parseFloat(n) || 0).toLocaleString('es-CO', {maximumFractionDigits: 2});
+}
 
 // Variables globales para el manejo de múltiples PDFs
 var pdfDataTransfer = new DataTransfer();
@@ -55,13 +61,19 @@ var sale = {
         this.detail.subtotal_12_sin_iva = this.detail.subtotal_12 * (1 - globalDiscountRate);
         this.detail.total = (this.detail.subtotal - this.detail.total_dscto) + this.detail.total_iva;
 
-        $('input[name="subtotal_0"]').val(this.detail.subtotal_0.toFixed(2));
-        $('input[name="subtotal_12"]').val(this.detail.subtotal_12.toFixed(2));
-        $('input[name="subtotal_12_sin_iva"]').val(this.detail.subtotal_12_sin_iva.toLocaleString('es-CL'));
-        $('input[name="iva"]').val(this.detail.iva.toLocaleString('es-CL'));
-        $('input[name="total_iva"]').val(this.detail.total_iva.toLocaleString('es-CL'));
-        $('input[name="total_dscto"]').val(this.detail.total_dscto.toLocaleString('es-CL'));
-        $('input[name="total"]').val(this.detail.total.toLocaleString('es-CL')); 
+        // Total bruto: precio × cantidad de todas las líneas, antes de descuentos.
+        // Descuentos: los de cada línea más el global. Subtotal: bruto menos descuentos. Total: subtotal + impuestos.
+        var gross = this.detail.products.reduce(function (a, b) { return a + (b.subtotal || 0); }, 0);
+        var lineDiscounts = this.detail.products.reduce(function (a, b) { return a + (b.total_dscto || 0); }, 0);
+        this.detail.gross = gross;
+        this.detail.discounts = lineDiscounts + this.detail.total_dscto;
+        this.detail.net = gross - this.detail.discounts;
+
+        $('input[name="gross_total"]').val(fmtMoney(this.detail.gross));
+        $('input[name="total_dscto"]').val(fmtMoney(this.detail.discounts));
+        $('input[name="net_subtotal"]').val(fmtMoney(this.detail.net));
+        $('input[name="total_iva"]').val(fmtMoney(this.detail.total_iva));
+        $('input[name="total"]').val(fmtMoney(this.detail.total));
 
         var cash = parseFloat(input_cash.val()) || 0;
         var change = cash - sale.detail.total;
@@ -152,19 +164,6 @@ var sale = {
 };
 
 $(function () {
-    // --- LLENADO DINÁMICO DE FACTURACIÓN ELECTRÓNICA (FACTUS) ---
-    const rangeInput = $('input[name="numbering_range"]');
-    const consecutiveInput = $('input[name="consecutive"]');
-
-    if (rangeInput.length && typeof FACTUS_RANGE_DISPLAY !== 'undefined') {
-        rangeInput.val(FACTUS_RANGE_DISPLAY);
-        rangeInput.attr('readonly', true);
-    }
-
-    if (consecutiveInput.length && typeof FACTUS_CURRENT_CONSECUTIVE !== 'undefined') {
-        consecutiveInput.val(FACTUS_CURRENT_CONSECUTIVE);
-        consecutiveInput.attr('readonly', true);
-    }
     select_client = $('select[name="client"]');
     input_cash = $('input[name="cash"]');
     input_change = $('input[name="change"]');
@@ -428,9 +427,11 @@ $(function () {
     })
     .on('select2:select', function (e) {
         var data = e.params.data;
+        selectedClient = data;
         $('#client_email').val(data.email || '');
     })
     .on('select2:unselect', function (e) {
+        selectedClient = null;
         $('#client_email').val('');
     });
 
@@ -781,30 +782,13 @@ $(function () {
                         toastr.warning(warning);
                     });
                 }
-                dialog_action({
-                    'content': '¿Desea imprimir la boleta de venta?',
-                    'success': function () {
-                        var iframe = document.getElementById('print_frame');
-                        iframe.src = request.print_url;
-                        iframe.onload = function() {
-                            iframe.contentWindow.focus();
-                            iframe.contentWindow.print();
-
-                            iframe.contentWindow.onafterprint = function() {
-                                toastr.success('La factura se guardó exitosamente');
-                                setTimeout(function() {
-                                    location.href = url_refresh;
-                                }, 1000);
-                            };
-                        };
-                    },
-                    'cancel': function () {
-                        toastr.success('La factura se guardó exitosamente');
-                        setTimeout(function() {
-                            location.href = url_refresh;
-                        }, 1000);
-                    }
-                });
+                // Guardar no imprime nada: la factura se imprime después de validarla (opción del listado).
+                toastr.success((typeof EDIT_MODE !== 'undefined' && EDIT_MODE)
+                    ? 'Los cambios de la factura se guardaron. Recuerde validarla desde el listado para enviarla a la DIAN.'
+                    : 'La factura se guardó. Recuerde validarla desde el listado para enviarla a la DIAN.');
+                setTimeout(function () {
+                    location.href = url_refresh;
+                }, 1500);
             }
         };
         submit_with_formdata(args);
@@ -937,193 +921,262 @@ function clearAllPdfs(event) {
 }
 
 
-// --- ACCIÓN DE PREVISUALIZACIÓN DE FACTURA (ESTILO FACTUS / BOOTSTRAP 5) ---
+// ---------------------------------------------------------------------------------------------------------
+// EDICIÓN: carga en el formulario la factura que se está editando (la entrega el servidor en #edit-sale-data)
+// ---------------------------------------------------------------------------------------------------------
+var EDIT_MODE = !!document.getElementById('edit-sale-data');
+
+$(function () {
+    var el = document.getElementById('edit-sale-data');
+    if (!el) {
+        return;
+    }
+    var d = JSON.parse(el.textContent);
+
+    // Cliente
+    selectedClient = d.client;
+    select_client.append(new Option(d.client.text, d.client.id, true, true)).trigger('change');
+    $('#client_email').val(d.client.email || '');
+
+    // Forma y medio de pago. Cada cambio reconstruye listas y reinicia valores, por eso los montos van al final.
+    select_paymentmethod.val(d.paymentmethod).trigger('change');
+    if (d.transfermethods) {
+        select_transfermethods.val(d.transfermethods).trigger('change');
+    }
+    select_typemethods.val(d.typemethods).trigger('change');
+    select_service_type.val(d.service_type).trigger('change');
+    if (d.expiration_date) {
+        expiration_date.val(d.expiration_date);
+    }
+
+    // Fecha, descuento, observaciones y productos
+    $('input[name="date_joined"]').val(d.date_joined);
+    $('input[name="dscto"]').val(parseFloat(d.dscto).toFixed(2));
+    $('textarea[name="description"], #id_description').first().val(d.description).trigger('change');
+    sale.detail.products = d.products;
+    sale.listProducts();
+
+    // Montos
+    input_propina.val(parseFloat(d.propina).toFixed(2));
+    input_nequi_value.val(parseFloat(d.nequi_value).toFixed(2));
+    input_daviplata_value.val(parseFloat(d.daviplata_value).toFixed(2));
+    input_cash.val(parseFloat(d.cash).toFixed(2)).trigger('change');
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// PREVISUALIZACIÓN: todo sale de la factura que se está llenando; lo que aún no existe se indica como pendiente
+// ---------------------------------------------------------------------------------------------------------
+function esc(v) {
+    return $('<div>').text(v === null || v === undefined ? '' : String(v)).html();
+}
+
+function money(n) {
+    return '$' + (parseFloat(n) || 0).toLocaleString('es-CO', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+function dmy(ymd) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd || '');
+    return m ? m[3] + '-' + m[2] + '-' + m[1] : (ymd || '');
+}
+
+// «IVA 19%», «INC 8%», «Excluido», «Exento»: igual a lo que se enviará a Factus
+function taxLabelOf(item) {
+    if (!item.with_tax) {
+        return item.tax === 'iva_excluido' ? 'Excluido' : (item.tax === 'iva_exento' ? 'Exento' : 'IVA 0%');
+    }
+    return (String(item.tax || '').indexOf('inc') === 0 ? 'INC ' : 'IVA ') + (parseFloat(item.tax_rate) || 0) + '%';
+}
+
+// Impuestos agrupados por tarifa, con el descuento global aplicado (igual que el servidor)
+function previewTaxGroups(products, globalRate) {
+    var groups = {};
+    products.forEach(function (item) {
+        if (!item.with_tax || !(item.iva > 0)) {
+            return;
+        }
+        var label = taxLabelOf(item);
+        groups[label] = groups[label] || {label: label, base: 0, tax: 0};
+        groups[label].base += (item.total || 0) * (1 - globalRate);
+        groups[label].tax += (item.total_iva || 0) * (1 - globalRate);
+    });
+    return Object.keys(groups).sort().map(function (k) { return groups[k]; });
+}
+
+function buildPreviewHtml(range) {
+    var company = {};
+    try { company = JSON.parse(document.getElementById('company-info-data').textContent) || {}; } catch (e) { company = {}; }
+    var detail = sale.detail;
+    var products = detail.products;
+    var globalRate = (parseFloat(detail.dscto) || 0) / 100;
+    var client = selectedClient || {};
+
+    var isCredit = select_typemethods.val() === 'credit';
+    var paymentForm = isCredit ? 'Crédito' : 'Contado';
+    // El medio de pago que recibirá Factus: efectivo (10) o consignación bancaria (42)
+    var paymentMethod = select_paymentmethod.val() === 'cash' ? 'Efectivo' : 'Consignación bancaria';
+    var description = $('textarea[name="description"], #id_description').first().val() || '';
+    var dueDate = isCredit ? dmy(expiration_date.val()) : '—';
+    var reference = (typeof EDIT_MODE !== 'undefined' && EDIT_MODE)
+        ? 'pago-' + JSON.parse(document.getElementById('edit-sale-data').textContent).id : 'pago-(se asigna al guardar)';
+
+    var rows = products.map(function (item, index) {
+        return '<tr>' +
+            '<td class="text-center align-middle">' + (index + 1) + '</td>' +
+            '<td class="text-start align-middle"><code>' + esc(item.code) + '</code></td>' +
+            '<td class="text-start align-middle">' + esc(item.name || item.short_name) + '</td>' +
+            '<td class="text-end align-middle">' + money(item.pvp) + '</td>' +
+            '<td class="text-center align-middle">' + (parseFloat(item.cant) || 0).toFixed(2) + '</td>' +
+            '<td class="text-end align-middle">' + (parseFloat(item.dscto) || 0).toFixed(2) + '%</td>' +
+            '<td class="text-center align-middle"><small class="fw-bold">' + esc(taxLabelOf(item)) + '</small></td>' +
+            '<td class="text-end align-middle fw-bold">' + money(item.total) + '</td>' +
+            '</tr>';
+    }).join('');
+
+    var taxRows = previewTaxGroups(products, globalRate).map(function (g) {
+        return '<tr><td>' + esc(g.label) + ':</td><td class="text-end">' + money(g.tax) + '</td></tr>';
+    }).join('') || '<tr><td>Impuestos:</td><td class="text-end">' + money(0) + '</td></tr>';
+
+    // «current» es el PRÓXIMO número del rango; el número final se confirma al validar
+    var numbering = range
+        ? esc((range.prefix || '') + range.current) + '<br><small class="text-muted fw-normal">próxima numeración · se confirma al validar</small>'
+        : 'Se asigna al validar en la DIAN';
+    var resolution = range
+        ? 'Resolución de facturación electrónica No: ' + esc(range.resolution_number) + ' - Prefijo: ' + esc(range.prefix || '') +
+          ' - Rango ' + esc(range.from) + ' al ' + esc(range.to) + (range.date_from ? ' - Vigencia desde ' + esc(dmy(range.date_from)) + ' hasta ' + esc(dmy(range.date_to)) : '')
+        : 'La resolución y el rango de numeración se aplican al validar la factura.';
+
+    var logo = company.logo
+        ? '<img src="' + esc(company.logo) + '" class="img-fluid" style="max-width: 140px;" alt="Logo de la empresa">'
+        : '<i class="fas fa-building fa-3x text-muted"></i>';
+    var docType = client.document_type && client.document_type.abbreviation ? client.document_type.abbreviation : 'CC/NIT';
+    var dni = client.dni ? client.dni + (client.dv ? ' - ' + client.dv : '') : '';
+    var contact = [company.mobile, company.phone, company.email].filter(Boolean).join(' | ');
+
+    function li(label, value, shaded) {
+        return '<li class="list-group-item d-flex py-1 px-2' + (shaded ? ' bg-light' : '') + '"><span class="fw-bold w-25">' + label +
+            '</span> <span class="w-75">' + esc(value || '—') + '</span></li>';
+    }
+
+    return '<div class="container-fluid bg-white p-4 border rounded shadow-sm text-dark" style="font-size: 0.95rem;">' +
+        '<div class="row align-items-center pb-3 mb-4 border-bottom">' +
+            '<div class="col-4 text-center">' + logo + '</div>' +
+            '<div class="col-4 text-center">' +
+                '<h6 class="fw-bold text-uppercase mb-1">Factura electrónica de Venta</h6>' +
+                '<h5 class="fw-bold text-primary mb-2">' + numbering + '</h5>' +
+                '<p class="fw-bold mb-1">' + esc(company.name) + '</p>' +
+                '<p class="mb-0 text-muted small">NIT ' + esc(company.nit) + '</p>' +
+                '<p class="mb-0 text-muted small">' + esc(contact) + '</p>' +
+                '<p class="mb-0 text-muted small">' + esc(company.address) + '</p>' +
+            '</div>' +
+            '<div class="col-4 text-end"><span class="badge bg-warning text-dark">Borrador · sin validar</span></div>' +
+        '</div>' +
+        '<div class="row mb-4">' +
+            '<div class="col-lg-7 mb-3 mb-lg-0"><ul class="list-group list-group-flush border rounded">' +
+                li(esc(docType) + ':', dni, true) +
+                li('Cliente:', client.names || client.text, false) +
+                li('País:', 'Colombia', true) +
+                li('Municipio:', client.municipality ? client.municipality.name : '', false) +
+                li('Dirección:', client.address, true) +
+                li('Email:', $('#client_email').val() || client.email, false) +
+                li('Teléfono:', client.mobile, true) +
+            '</ul></div>' +
+            '<div class="col-lg-5"><ul class="list-group list-group-flush border rounded">' +
+                '<li class="list-group-item d-flex justify-content-between py-2 px-2 bg-light"><span class="fw-bold">Fecha de generación:</span><span>' + esc(dmy($('input[name="date_joined"]').val())) + '</span></li>' +
+                '<li class="list-group-item d-flex justify-content-between py-2 px-2"><span class="fw-bold">Fecha de validación:</span><span class="text-muted">Pendiente</span></li>' +
+            '</ul></div>' +
+        '</div>' +
+        '<div class="table-responsive mb-4"><table class="table table-bordered table-sm align-middle">' +
+            '<thead class="table-light text-center"><tr><th>#</th><th>Código</th><th>Descripción</th><th>Val. Unit</th><th>Cantidad</th><th>Descuento</th><th>Impuesto</th><th>Val. Item</th></tr></thead>' +
+            '<tbody>' + rows + '</tbody></table></div>' +
+        '<div class="row mb-4">' +
+            '<div class="col-lg-7 mb-3 mb-lg-0"><div class="border rounded p-3 h-100 bg-light">' +
+                '<h6 class="fw-bold text-uppercase border-bottom pb-2">Observaciones</h6>' +
+                '<p class="mb-0 text-muted" style="white-space: pre-line;">' + esc(description || 'Sin observaciones') + '</p>' +
+            '</div></div>' +
+            '<div class="col-lg-5"><div class="border rounded bg-white p-2">' +
+                '<h6 class="fw-bold text-uppercase border-bottom pb-2 text-center bg-light m-0 p-2">Totales</h6>' +
+                '<table class="table table-sm table-borderless mb-0">' +
+                    '<tr><td>Nro líneas:</td><td class="text-end">' + products.length + '</td></tr>' +
+                    '<tr><td>Valor bruto:</td><td class="text-end">' + money(detail.gross) + '</td></tr>' +
+                    '<tr><td>Base imponible:</td><td class="text-end">' + money(detail.subtotal_12_sin_iva) + '</td></tr>' +
+                    taxRows +
+                    '<tr><td>Descuentos (-):</td><td class="text-end">' + money(detail.discounts) + '</td></tr>' +
+                    '<tr class="border-top fw-bold text-success"><td class="pt-2">Total factura:</td><td class="text-end pt-2">' + money(detail.total) + '</td></tr>' +
+                '</table></div></div>' +
+        '</div>' +
+        '<div class="row mb-4">' +
+            '<div class="col-md-6"><h6 class="fw-bold">Tipo de operación</h6><p class="text-muted mb-0">Estándar</p></div>' +
+            '<div class="col-md-6"><h6 class="fw-bold">Detalles de Pago</h6>' +
+                '<div class="border-start border-3 border-primary ps-3 py-1">' +
+                    '<p class="mb-1"><strong>Forma de pago:</strong> ' + esc(paymentForm) + '</p>' +
+                    '<p class="mb-1"><strong>Medio de pago:</strong> ' + esc(paymentMethod) + '</p>' +
+                    '<p class="mb-1"><strong>Referencia:</strong> ' + esc(reference) + '</p>' +
+                    '<p class="mb-1"><strong>Monto:</strong> ' + money(detail.total) + '</p>' +
+                    '<p class="mb-0"><strong>Fecha de vencimiento:</strong> ' + esc(dueDate) + '</p>' +
+                '</div></div>' +
+        '</div>' +
+        '<div class="bg-light p-3 rounded text-center border">' +
+            '<small class="fw-bold text-break d-block mb-2">CUFE: se genera al validar la factura en la DIAN</small><hr class="my-2">' +
+            '<p class="text-muted mb-0" style="font-size: 0.85rem;">' + resolution + '</p>' +
+        '</div>' +
+    '</div>';
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// NUMERACIÓN: rango y consecutivo que siguen en Factus (solo consulta; no reserva ni consume ningún número)
+// ---------------------------------------------------------------------------------------------------------
+var numberingRange;          // undefined = consultando · null = no disponible · objeto = rango activo
+var numberingLoad = $.Deferred();
+
+function showNumbering(response) {
+    var range = response && response.range ? response.range : null;
+    var $hint = $('#numberingHint').removeClass('text-danger text-muted');
+    if (!range) {
+        $('#numbering_range').val('No disponible');
+        $('#consecutive').val('—');
+        $hint.addClass('text-danger').text((response && response.error) ||
+            'No se pudo consultar a Factus. La numeración se asigna al validar la factura.');
+        return;
+    }
+    $('#numbering_range').val((range.prefix ? range.prefix + ' ' : '') + '(' + range.from + ' - ' + range.to + ')');
+    $('#consecutive').val(range.current);
+    if (range.exhausted) {
+        $hint.addClass('text-danger').text('El rango de numeración se agotó: solicite uno nuevo en Factus.');
+    } else {
+        $hint.addClass('text-muted').text('Próxima factura: ' + (range.prefix || '') + range.current + '. Se confirma al validar la factura (opción «Validar» del listado).');
+    }
+}
+
+$(function () {
+    $.ajax({
+        url: pathname, type: 'POST', dataType: 'json', timeout: 12000,
+        headers: {'X-CSRFToken': csrftoken},
+        data: {action: 'numbering_preview'},
+        success: function (response) {
+            numberingRange = response && response.range ? response.range : null;
+            showNumbering(response);
+            numberingLoad.resolve();
+        },
+        error: function () {
+            numberingRange = null;
+            showNumbering(null);
+            numberingLoad.resolve();
+        }
+    });
+});
+
+$(function () {
     $('#btnPreviewInvoice').on('click', function (e) {
         e.preventDefault();
-
         if (sale.detail.products.length === 0) {
             return message_error('Debe tener al menos 1 producto en su detalle para previsualizar');
         }
-
-        // Obtener datos del formulario
-        const dateJoined = $('input[name="date_joined"]').val() || '03-08-2026 11:53:57 AM';
-        const numberingRange = $('input[name="numbering_range"]').val() || 'SETP990000005';
-        const consecutive = $('input[name="consecutive"]').val() || '5';
-        
-        // Cliente
-        const clientText = select_client.find('option:selected').text() || 'COORSERPARK SAS';
-        const clientEmail = $('#client_email').val() || 'prueba1@gmail.com';
-        
-        // Pagos y observaciones
-        const paymentMethod = $('select[name="paymentmethod"] option:selected').text() || 'Pago a crédito';
-        const typeMethods = $('select[name="typemethods"] option:selected').text() || 'Consignación';
-        const description = $('textarea[name="description"], #id_description').val() || 'Factura generada desde POS';
-        const expirationDate = $('input[name="expiration_date"]').val() || '18-08-2026';
-
-        // Totales calculados
-        const subtotalSinIva = $('input[name="subtotal_12_sin_iva"]').val() || '0.00';
-        const totalIva = $('input[name="total_iva"]').val() || '0.00';
-        const totalDscto = $('input[name="total_dscto"]').val() || '0.00';
-        const totalGeneral = $('input[name="total"]').val() || '0.00';
-
-        // Construir filas de productos para la tabla
-        let productsHtml = '';
-        let totalLines = sale.detail.products.length;
-        
-        sale.detail.products.forEach(function (item, index) {
-            let pvp = parseFloat(item.pvp) || 0;
-            let cant = parseFloat(item.cant) || 0;
-            let dscto = parseFloat(item.dscto) || 0;
-            let itemTotal = item.total || 0;
-            let taxRate = item.iva || '0.00';
-
-            productsHtml += `
-                <tr>
-                    <td class="text-center align-middle">${index + 1}</td>
-                    <td class="text-start align-middle"><code>${item.code || '15'}</code></td>
-                    <td class="text-start align-middle">${item.name || item.short_name || 'Servicio'}</td>
-                    <td class="text-end align-middle">$${pvp.toLocaleString('es-CL', {minimumFractionDigits: 2})}</td>
-                    <td class="text-center align-middle">${cant.toFixed(2)}</td>
-                    <td class="text-end align-middle">$${dscto.toLocaleString('es-CL', {minimumFractionDigits: 2})}</td>
-                    <td class="text-center align-middle"><small class="fw-bold">(IVA)</small> ${taxRate}%</td>
-                    <td class="text-end align-middle fw-bold">$${parseFloat(itemTotal).toLocaleString('es-CL', {minimumFractionDigits: 2})}</td>
-                </tr>
-            `;
+        // Si la numeración todavía se está consultando, se espera a que termine (máx. 12 s); luego se muestra.
+        var $btn = $(this).prop('disabled', true);
+        numberingLoad.always(function () {
+            $btn.prop('disabled', false);
+            $('#previewInvoiceContent').html(buildPreviewHtml(numberingRange || null));
+            $('#modalPreviewInvoice').modal('show');
         });
-
-        // Obtener la ruta del logo de la empresa y asegurar que sea absoluta desde la raíz
-        let companyLogo = 'https://cdn-sandbox.factus.com.co/companies/900438757/logos/logo-1L9qH3MCQcObTV27z4h2xMJKx5sIiSI6.png'; // Respaldo por defecto
-        
-        if (typeof company !== 'undefined' && company.image) {
-            // Si la ruta no empieza con http ni con barra, le anteponemos la barra '/' para que sea absoluta desde el dominio
-            companyLogo = company.image.startsWith('http') ? company.image : '/' + company.image.replace(/^\/+/, '');
-        }
-
-        // Maquetación HTML utilizando estrictamente Bootstrap 5 (Tamaño de fuente incrementado a 0.95rem)
-        const previewHtml = `
-            <div class="container-fluid bg-white p-4 border rounded shadow-sm text-dark" style="font-size: 0.95rem;">
-                
-                <!-- ENCABEZADO -->
-                <div class="row align-items-center pb-3 mb-4 border-bottom">
-                    <div class="col-4 text-center">
-                        <img src="${companyLogo}" class="img-fluid" style="max-width: 140px;" alt="Logo de la empresa">
-                    </div>
-                    <div class="col-4 text-center">
-                        <h6 class="fw-bold text-uppercase mb-1">Factura electrónica de Venta</h6>
-                        <h5 class="fw-bold text-primary mb-2">${numberingRange}</h5>
-                        <p class="fw-bold mb-1">EXEQUIALES ESCOBAR S.A.S</p>
-                        <p class="mb-0 text-muted small">NIT 900438757 - 2</p>
-                        <p class="mb-0 text-muted small">3023812461 | fexequialesescobar@hotmail.com</p>
-                        <p class="mb-0 text-muted small">Calle 5 # 7A-31, Facatativá - Cundinamarca</p>
-                    </div>
-                    <div class="col-4 text-end">
-                        <span class="badge bg-success">Factura Electrónica</span>
-                    </div>
-                </div>
-
-                <!-- DATOS CLIENTE Y FECHAS -->
-                <div class="row mb-4">
-                    <div class="col-lg-7 mb-3 mb-lg-0">
-                        <ul class="list-group list-group-flush border rounded">
-                            <li class="list-group-item d-flex py-1 px-2 bg-light"><span class="fw-bold w-25">CC/NIT:</span> <span class="w-75">12345678 - 8</span></li>
-                            <li class="list-group-item d-flex py-1 px-2"><span class="fw-bold w-25">Cliente:</span> <span class="w-75">${clientText}</span></li>
-                            <li class="list-group-item d-flex py-1 px-2 bg-light"><span class="fw-bold w-25">País:</span> <span class="w-75">Colombia</span></li>
-                            <li class="list-group-item d-flex py-1 px-2"><span class="fw-bold w-25">Municipio:</span> <span class="w-75">Bogotá, D.C. / Bogota-D.C.</span></li>
-                            <li class="list-group-item d-flex py-1 px-2 bg-light"><span class="fw-bold w-25">Dirección:</span> <span class="w-75">bogota</span></li>
-                            <li class="list-group-item d-flex py-1 px-2"><span class="fw-bold w-25">Email:</span> <span class="w-75">${clientEmail}</span></li>
-                        </ul>
-                    </div>
-                    <div class="col-lg-5">
-                        <ul class="list-group list-group-flush border rounded">
-                            <li class="list-group-item d-flex justify-content-between py-2 px-2 bg-light">
-                                <span class="fw-bold">Fecha de generación:</span> 
-                                <span>${dateJoined}</span>
-                            </li>
-                            <li class="list-group-item d-flex justify-content-between py-2 px-2">
-                                <span class="fw-bold">Fecha de validación:</span> 
-                                <span>${dateJoined}</span>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-
-                <!-- TABLA DE PRODUCTOS -->
-                <div class="table-responsive mb-4">
-                    <table class="table table-bordered table-sm align-middle">
-                        <thead class="table-light text-center">
-                            <tr>
-                                <th>#</th>
-                                <th>Código</th>
-                                <th>Descripción</th>
-                                <th>Val. Unit</th>
-                                <th>Cantidad</th>
-                                <th>Descuento</th>
-                                <th>Impuesto %</th>
-                                <th>Val. Item</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${productsHtml}
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- OBSERVACIONES Y TOTALES -->
-                <div class="row mb-4">
-                    <div class="col-lg-7 mb-3 mb-lg-0">
-                        <div class="border rounded p-3 h-100 bg-light">
-                            <h6 class="fw-bold text-uppercase border-bottom pb-2">Observaciones</h6>
-                            <p class="mb-0 text-muted" style="white-space: pre-line;">${description}</p>
-                        </div>
-                    </div>
-                    <div class="col-lg-5">
-                        <div class="border rounded bg-white p-2">
-                            <h6 class="fw-bold text-uppercase border-bottom pb-2 text-center bg-light m-0 p-2">Totales</h6>
-                            <table class="table table-sm table-borderless mb-0">
-                                <tr><td>Nro líneas:</td><td class="text-end">${totalLines}</td></tr>
-                                <tr><td>Valor bruto:</td><td class="text-end">$${subtotalSinIva}</td></tr>
-                                <tr><td>Base imponible:</td><td class="text-end">$0.00</td></tr>
-                                <tr><td>Impuestos:</td><td class="text-end">$${totalIva}</td></tr>
-                                <tr><td>Descuento global (-):</td><td class="text-end">$${totalDscto}</td></tr>
-                                <tr><td>Recargo global (+):</td><td class="text-end">$0.00</td></tr>
-                                <tr class="border-top fw-bold text-success">
-                                    <td class="pt-2">Total factura:</td><td class="text-end pt-2">$${totalGeneral}</td>
-                                </tr>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- DETALLES DE PAGO Y TIPO DE OPERACIÓN -->
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <h6 class="fw-bold">Tipo de operación</h6>
-                        <p class="text-muted mb-0">Estándar</p>
-                    </div>
-                    <div class="col-md-6">
-                        <h6 class="fw-bold">Detalles de Pago</h6>
-                        <div class="border-start border-3 border-primary ps-3 py-1">
-                            <p class="mb-1"><strong>Forma de pago:</strong> ${paymentMethod}</p>
-                            <p class="mb-1"><strong>Medio de pago:</strong> ${typeMethods}</p>
-                            <p class="mb-1"><strong>Referencia:</strong> pago-${consecutive}</p>
-                            <p class="mb-1"><strong>Monto:</strong> $${totalGeneral}</p>
-                            <p class="mb-0"><strong>Fecha de vencimiento:</strong> ${expirationDate}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- PIE DE PAGINA / CUFE -->
-                <div class="bg-light p-3 rounded text-center border">
-                    <small class="fw-bold text-break d-block mb-2">CUFE: 940700f886b73eeee9a5ae93f23372e00930f3bb68d9489a55a99030e38dcbed</small>
-                    <hr class="my-2">
-                    <p class="text-muted mb-0" style="font-size: 0.85rem;">
-                        Actividad económica: 9603 - Resolución de Facturación Electrónica No: 18760000001 - Prefijo: SETP Rango 990000000 Al 995000000 - Vigencia desde 19-01-2019 - hasta 19-01-2030
-                    </p>
-                </div>
-
-            </div>
-        `;
-
-        $('#previewInvoiceContent').html(previewHtml);
-        $('#modalPreviewInvoice').modal('show');
     });
+});

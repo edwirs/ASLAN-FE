@@ -155,15 +155,14 @@
                     {{ form.date_joined }}
                 </div>
                 <div class="col-12 col-lg-4 mb-3 mb-lg-0">
-                    <!-- Campo oculto para almacenar el ID del rango de numeración -->
-                    <input type="hidden" id="numbering_range_id" name="numbering_range_id" value="">
                     <label class="form-label label-dark"><i class="fas fa-list-ol me-1 mr-1"></i>Rango de numeración:</label>
-                    <input type="text" name="numbering_range" class="form-control" readonly>
+                    <input type="text" name="numbering_range" id="numbering_range" class="form-control" readonly value="Consultando a Factus...">
                 </div>
                 <div class="col-12 col-lg-4">
                     <label class="form-label label-dark"><i class="fas fa-receipt me-1 mr-1"></i>Consecutivo factura:</label>
-                    <input type="text" name="consecutive" class="form-control" readonly>
+                    <input type="text" name="consecutive" id="consecutive" class="form-control" readonly value="...">
                 </div>
+                <div class="col-12 mt-2"><small class="text-muted" id="numberingHint">Es la numeración que sigue en Factus. Se confirma al validar la factura (opción «Validar» del listado).</small></div>
             </div>
         </div>
     </div>
@@ -240,20 +239,20 @@
     <div class="col-12">
         <div class="invoice-summary-container mb-0">
             <div class="d-flex flex-column flex-md-row justify-content-end align-items-stretch align-items-md-center">
-                <div class="summary-item summary-divider">
+                <div class="summary-item summary-divider" title="Suma de precio × cantidad de todas las líneas, antes de descuentos">
                     <span class="summary-label">Total Bruto</span>
-                    {{ form.subtotal_12_sin_iva }}
+                    <input type="text" name="gross_total" class="form-control" value="0" disabled>
                 </div>
-                <div class="summary-item summary-divider">
+                <div class="summary-item summary-divider" title="Descuentos de las líneas más el descuento global">
                     <span class="summary-label">Descuentos</span>
                     {{ form.total_dscto }}
                 </div>
-                <div class="summary-item summary-divider">
+                <div class="summary-item summary-divider" title="Total bruto menos descuentos (base antes de impuestos)">
                     <span class="summary-label">Subtotal</span>
-                    {{ form.iva }}
+                    <input type="text" name="net_subtotal" class="form-control" value="0" disabled>
                 </div>
-                <div class="summary-item summary-divider">
-                    <span class="summary-label">Impuesto (IVA)</span>
+                <div class="summary-item summary-divider" title="IVA, impoconsumo u otros impuestos de cada producto">
+                    <span class="summary-label">Impuestos</span>
                     {{ form.total_iva }}
                 </div>
                 <div class="summary-item summary-item-total">
@@ -412,7 +411,7 @@
         <i class="fas fa-list-check mr-1 me-1"></i> Previsualizar
     </button>
     <button type="submit" class="btn btn-primary px-4 shadow-sm">
-        <i class="fas fa-file-invoice-dollar mr-1 me-1"></i> Guardar y Enviar
+        <i class="fas fa-save mr-1 me-1"></i> Guardar
     </button>
     <a href="{{ list_url }}" class="btn btn-danger px-4 shadow-sm">
         <i class="fas fa-times mr-1 me-1"></i> Cancelar
@@ -421,20 +420,10 @@
 
 {% block content_form_before %}
 {{ observation_templates|json_script:"observation-templates-data" }}
-    <script>
-        // Inyectamos dinámicamente desde el contexto de Django
-        const ACTIVE_RANGE_ID = "{{ factus_range_id|default:'8' }}";
-        document.addEventListener("DOMContentLoaded", function() {
-            const hiddenInput = document.getElementById("numbering_range_id");
-            if (hiddenInput) {
-                hiddenInput.value = ACTIVE_RANGE_ID;
-            }
-        });
-        const FACTUS_RANGE_DISPLAY = "{{ factus_range_text|default:'SETP (0 - 0)' }}";
-        const FACTUS_CURRENT_CONSECUTIVE = "{{ factus_current|default:'1' }}";
-    </script>
+    {{ company_info|json_script:"company-info-data" }}
+    {% if edit_sale %}{{ edit_sale|json_script:"edit-sale-data" }}{% endif %}
     <!-- Archivo JS externo referenciado -->
-    <script src="{% static 'salefe/admin/js/form.js' %}"></script>
+    <script src="{% static 'salefe/admin/js/form.js' %}?v=20261113"></script>
     <iframe id="print_frame" style="display:none;"></iframe>
     {% include 'cashdrawer/widget.html' with source='salefe' %}
 {% endblock %}

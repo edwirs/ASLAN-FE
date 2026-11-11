@@ -12,7 +12,7 @@
     <script src="{% static 'lib/bootstrap-daterangepicker-3.1/js/spanish.js' %}"></script>
     <script src="{% static 'lib/bootstrap-daterangepicker-3.1/js/daterangepicker.js' %}"></script>
     <link rel="stylesheet" href="{% static 'lib/bootstrap-daterangepicker-3.1/css/daterangepicker.css' %}"/>
-    <script src="{% static 'salefe/admin/js/list.js' %}"></script>
+    <script src="{% static 'salefe/admin/js/list.js' %}?v=20261115"></script>
     <!-- Toastr CSS -->
     <link rel="stylesheet" href="{% static 'lib/adminlte-3.2.0/plugins/toastr/toastr.min.css' %}">
     <!-- Toastr JS -->
@@ -90,6 +90,29 @@
         .status-chip.status-warning { color: #fd7e14; }
         .status-chip.status-danger { color: #dc3545; }
         .status-chip.status-muted { color: #adb5bd; }
+
+        /* Botón «Validar» al lado de los 3 puntos */
+        .btn-validate {
+            height: 34px;
+            padding: 0 .9rem;
+            border-radius: 17px;
+            font-size: .85rem;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        /* Ventana RADIAN: tablero de 5 eventos */
+        .radian-info th { width: 38%; font-weight: 700; background: rgba(120, 130, 150, .12); }
+        .radian-info td { background: transparent; }
+        .radian-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+        .radian-step { text-align: center; padding: .25rem .5rem; }
+        .radian-step-name { font-size: .9rem; min-height: 2.6rem; }
+        .radian-step-when { font-size: .8rem; min-height: 2.3rem; margin: .4rem 0; line-height: 1.15; }
+        .radian-step-icon { font-size: 1.5rem; margin-bottom: .6rem; }
+        .radian-step-icon.pending { color: #c4cad4; }
+        .radian-title-value { display: inline-block; transform: rotate(-7deg); font-size: 2rem; font-weight: 800; font-style: italic;
+                              color: rgba(100, 130, 190, .35); letter-spacing: .02em; }
+        .radian-cufe { background: rgba(120, 130, 150, .12); border-radius: .4rem; padding: .7rem 1rem; text-align: center;
+                       font-weight: 700; font-size: .85rem; word-break: break-all; }
     </style>
 {% endblock %}
 
@@ -105,84 +128,83 @@
 {% endblock %}
 
 {% block javascript_list %}
-    <div class="modal fade" tabindex="-1" id="myModalResendEmail">
-        <div class="modal-dialog">
+    {{ can|json_script:"can-data" }}
+    <!-- RADIAN: eventos de la factura ante la DIAN -->
+    <div class="modal fade" tabindex="-1" id="modalRadian">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title fw-bold">
-                        <i class="fas fa-paper-plane"></i> Reenviar factura electrónica
-                    </h5>
+                    <h5 class="modal-title fw-bold"><i class="fas fa-shield-halved text-primary"></i> Eventos RADIAN <small class="text-muted ms-2" id="radianNumber"></small></h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">Cliente:</label>
-                        <input type="text" class="form-control" id="resendClientName" disabled>
-                    </div>
-                    <div class="mb-2">
-                        <label class="form-label fw-bold">Enviar a:</label>
-                        <div id="resendEmailList"></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="btnConfirmResendEmail">
-                        <i class="fas fa-paper-plane"></i> Enviar
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" tabindex="-1" id="myModalEdit">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title fw-bold">
-                        <i class="fa fa-edit"></i> Editar Pago
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="formEditSale">
-                        <!-- Totales Finales -->
-                        <div class="col-12 col-lg-12 card border p-3 ms-auto mb-4">
-                            <div class="row mb-3">
-                                <div class="col">
-                                    <label class="form-label fw-bold">{{ sale_form.paymentmethod.label }}:</label>
-                                    {{ sale_form.paymentmethod }}
-                                </div>
-                                <div class="col">
-                                    <label class="form-label fw-bold">{{ sale_form.transfermethods.label }}:</label>
-                                    {{ sale_form.transfermethods }}
-                                </div>
+                    <div id="radianLoading" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i> Consultando a Factus...</div>
+                    <div id="radianError" class="alert alert-danger" style="display:none;"></div>
+                    <div id="radianContent" style="display:none;">
+                        <!-- Datos de la factura + marca de título valor -->
+                        <div class="row g-3 align-items-center mb-4">
+                            <div class="col-lg-7">
+                                <table class="table table-sm radian-info mb-0">
+                                    <tr><th>NIT / Documento:</th><td id="radianDni"></td></tr>
+                                    <tr><th>Cliente:</th><td id="radianClient"></td></tr>
+                                    <tr><th>Fecha de generación:</th><td id="radianDate"></td></tr>
+                                    <tr><th>Forma de pago:</th><td id="radianForm"></td></tr>
+                                    <tr><th>Medio de pago:</th><td id="radianMethod"></td></tr>
+                                    <tr id="radianDueRow"><th>Fecha de vencimiento:</th><td id="radianDue"></td></tr>
+                                    <tr><th>Total:</th><td id="radianTotal" class="fw-bold"></td></tr>
+                                </table>
                             </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">{{ sale_form.total.label|upper }}</label>
-                                {{ sale_form.total }}
-                            </div>
-                            <div class="row mb-3">
-                                <div class="col">
-                                    <label class="form-label fw-bold">{{ sale_form.cash.label }}:</label>
-                                    {{ sale_form.cash }}
-                                </div>
-                                <div class="col">
-                                    <label class="form-label fw-bold">{{ sale_form.propina.label }}:</label>
-                                    {{ sale_form.propina }}
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label fw-bold">{{ sale_form.change.label }}:</label>
-                                {{ sale_form.change }}
+                            <div class="col-lg-5 text-center">
+                                <div id="radianTitleValue" class="radian-title-value" style="display:none;">Título valor</div>
+                                <div id="radianNoTitle" class="text-muted small" style="display:none;">Aún no es título valor: faltan el acuse de recibo, el recibo del bien o servicio y la aceptación.</div>
+                                <div class="mt-2"><span class="badge" id="radianBadge"></span></div>
                             </div>
                         </div>
-                    </form>
+
+                        <!-- Los 5 eventos RADIAN -->
+                        <div class="radian-board" id="radianBoard"></div>
+
+                        <!-- Aceptación tácita: se abre con el botón «Emitir» del último evento -->
+                        <div id="radianTacit" class="border rounded p-3 mt-4" style="display:none;">
+                            <h6 class="fw-bold"><i class="fas fa-file-signature"></i> Emitir aceptación tácita</h6>
+                            <p class="small text-muted">
+                                Solo para facturas a crédito sin aceptación ni reclamo del cliente. Se registra a nombre de la persona que llene estos datos.
+                            </p>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold">Tipo de documento</label>
+                                    <select class="form-select form-select-sm" id="tacitDocType">
+                                        <option value="13">13 - Cédula de ciudadanía</option>
+                                        <option value="31">31 - NIT</option>
+                                        <option value="22">22 - Cédula de extranjería</option>
+                                        <option value="41">41 - Pasaporte</option>
+                                        <option value="12">12 - Tarjeta de identidad</option>
+                                        <option value="21">21 - Tarjeta de extranjería</option>
+                                        <option value="42">42 - Documento de identificación extranjero</option>
+                                        <option value="47">47 - PEP</option>
+                                        <option value="48">48 - PPT</option>
+                                        <option value="50">50 - NIT otro país</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-5"><label class="form-label small fw-bold">Número de documento</label><input class="form-control form-control-sm" id="tacitId" maxlength="20"></div>
+                                <div class="col-md-3"><label class="form-label small fw-bold">DV (si es NIT)</label><input class="form-control form-control-sm" id="tacitDv" maxlength="1"></div>
+                                <div class="col-md-6"><label class="form-label small fw-bold">Nombres</label><input class="form-control form-control-sm" id="tacitFirst" maxlength="60"></div>
+                                <div class="col-md-6"><label class="form-label small fw-bold">Apellidos</label><input class="form-control form-control-sm" id="tacitLast" maxlength="60"></div>
+                                <div class="col-md-6"><label class="form-label small fw-bold">Cargo <span class="text-muted fw-normal">(opcional)</span></label><input class="form-control form-control-sm" id="tacitJob" maxlength="60"></div>
+                                <div class="col-md-6"><label class="form-label small fw-bold">Área <span class="text-muted fw-normal">(opcional)</span></label><input class="form-control form-control-sm" id="tacitDept" maxlength="60"></div>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm mt-3" id="btnRadianTacit"><i class="fas fa-check"></i> Emitir aceptación tácita</button>
+                        </div>
+
+                        <div class="radian-cufe mt-4" id="radianCufe"></div>
+                        <p class="small text-muted mt-3 mb-0">
+                            Los eventos de acuse, recibo, reclamo y aceptación expresa los emite el cliente (el adquirente); aquí solo se consultan.
+                            Solo la aceptación tácita se puede emitir desde aquí, y únicamente en facturas a crédito. El pago de la factura no es un
+                            evento que Factus informe.
+                        </p>
+                    </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" id="btnSaveEdit">Guardar</button>
-                </div>
+                <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button></div>
             </div>
         </div>
     </div>
