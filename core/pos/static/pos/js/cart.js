@@ -12,6 +12,9 @@ var PosCart = (function () {
     var totalFilter = null;   // (bruto) -> total a pagar (p. ej. con descuento o cortesía)
     var payable = 0;
     var focusQtyOnSelect = false;   // al elegir un producto, el cursor pasa al campo cantidad de su línea
+    var quickMode = false;          // Ventas Rápidas: líneas con botones − / +, resaltado y desplazamiento a la línea tocada
+    // En pantallas táctiles no se enfoca la cantidad: abriría el teclado en pantalla con cada producto tocado
+    var isTouch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
     function formatPrice(value) {
         return value.toLocaleString('es-CO', {style: 'currency', currency: 'COP', minimumFractionDigits: 0});
@@ -92,7 +95,7 @@ var PosCart = (function () {
         var lineTotal = qty * parseFloat(tr.data('price'));
         if (tr.find('.input-price').length) {
             // la columna Precio muestra el precio unitario editable y, debajo, el total de la línea (siempre)
-            tr.find('.price-display').text('Total ' + formatPrice(lineTotal));
+            tr.find('.price-display').text((tr.hasClass('pq-row') ? '' : 'Total ') + formatPrice(lineTotal));
         } else {
             tr.find('.price-display').text(formatPrice(lineTotal));
         }
@@ -112,12 +115,36 @@ var PosCart = (function () {
 
     // Deja el cursor en la cantidad de la línea (con el valor seleccionado, para escribir encima y cambiarlo ya).
     function focusQty(row) {
-        if (!focusQtyOnSelect || !row || !row.length) {
+        if (!focusQtyOnSelect || isTouch || !row || !row.length) {
             return;
         }
         var input = row.find('.input-qty');
         input.trigger('focus');
         input[0].select();
+    }
+
+    // Tras confirmar una cantidad o un precio con Enter: el cursor vuelve al buscador (en táctil solo se cierra el teclado).
+    function backToSearch(input) {
+        if (isTouch) {
+            input.blur();
+            return;
+        }
+        var target = $('#search_barcode, #pos_search').filter(':visible')[0];
+        if (target) {
+            target.focus();
+        }
+    }
+
+    // Venta rápida: resalta un momento la línea agregada o modificada y la deja a la vista.
+    function touchRow(row) {
+        if (!quickMode || !row || !row.length) {
+            return;
+        }
+        row.addClass('pq-flash');
+        try {
+            row[0].scrollIntoView({block: 'nearest'});
+        } catch (e) { /* navegador sin soporte: no es importante */ }
+        setTimeout(function () { row.removeClass('pq-flash'); }, 700);
     }
 
     // item: {id, name, stock, is_service, unit, has_options}; opt: {presentation_id, name, factor, pvp, own_stock, stock}
@@ -138,18 +165,47 @@ var PosCart = (function () {
             '<button type="button" class="btn btn-sm btn-danger ms-1 btn-delete" title="Eliminar"><i class="fas fa-trash-alt"></i></button></div></td>' :
             '<td><span class="price-display">' + formatPrice(qty * opt.pvp) + '</span>' +
             '<button type="button" class="btn btn-sm btn-danger ms-2 btn-delete" title="Eliminar"><i class="fas fa-trash-alt"></i></button></td>';
-        var row = $(
-            '<tr data-id="' + item.id + '" data-key="' + key + '" data-pres="' + (opt.presentation_id || '') + '"' +
+        var dataAttrs =
+            ' data-id="' + item.id + '" data-key="' + key + '" data-pres="' + (opt.presentation_id || '') + '"' +
             ' data-dec="' + (dec ? 'true' : 'false') + '"' +
             ' data-factor="' + opt.factor + '" data-price="' + opt.pvp + '" data-base-price="' + opt.pvp + '" data-stock="' + rowStock + '"' +
             ' data-own="' + (own ? 'true' : 'false') + '"' +
-            ' data-service="' + (item.is_service ? 'true' : 'false') + '" data-unit="' + escapeHtml(own ? opt.name : item.unit) + '">' +
-            '<td>' + label + '</td>' +
-            '<td style="width:' + (dec ? '100' : '70') + 'px;"><input type="number" class="form-control form-control-sm input-qty" value="' + qty + '" ' +
-            (dec ? 'min="0.001" step="0.001" inputmode="decimal"' : 'min="1" step="1"') + '></td>' +
-            priceCell +
-            '</tr>'
-        );
+            ' data-service="' + (item.is_service ? 'true' : 'false') + '" data-unit="' + escapeHtml(own ? opt.name : item.unit) + '"';
+        var row;
+        if (quickMode) {
+            // Línea de dos filas: nombre + eliminar, y debajo cantidad con − / +, precio unitario y total de la línea
+            var unitHtml = canEditPrice() ?
+                '<span class="pq-unit">c/u <input type="text" inputmode="decimal" autocomplete="off" class="form-control form-control-sm input-price" title="Editar precio de venta" value="' + opt.pvp + '"></span>' :
+                '<span class="pq-unit">' + formatPrice(opt.pvp) + ' c/u</span>';
+            row = $(
+                '<tr class="pq-row"' + dataAttrs + '><td class="pq-line">' +
+                '<div class="pq-line-top"><div class="pq-line-name">' + label + '</div>' +
+                '<button type="button" class="btn btn-delete" title="Quitar de la venta" aria-label="Quitar de la venta"><i class="fas fa-times"></i></button></div>' +
+                '<div class="pq-line-bottom">' +
+                '<div class="pq-qty"><button type="button" class="pq-step" data-d="-1" aria-label="Menos">&minus;</button>' +
+                '<input type="number" class="input-qty' + (dec ? ' pq-dec' : '') + '" value="' + qty + '" ' +
+                (dec ? 'min="0.001" step="0.001" inputmode="decimal"' : 'min="1" step="1" inputmode="numeric"') + ' aria-label="Cantidad">' +
+                '<button type="button" class="pq-step" data-d="1" aria-label="Más">+</button></div>' +
+                unitHtml +
+                '<div class="pq-line-total"><span class="price-display">' + formatPrice(qty * opt.pvp) + '</span></div>' +
+                '</div></td></tr>'
+            );
+            row.find('.pq-step').on('click', function () {
+                var next = round3((readQty(row) || 0) + parseInt($(this).data('d'), 10));
+                row.find('.input-qty').val(next < (dec ? 0.001 : 1) ? (dec ? 0.001 : 1) : next);
+                updateRow(row);
+            });
+            row.find('.input-qty').on('focus', function () { this.select(); });
+        } else {
+            row = $(
+                '<tr' + dataAttrs + '>' +
+                '<td>' + label + '</td>' +
+                '<td style="width:' + (dec ? '100' : '70') + 'px;"><input type="number" class="form-control form-control-sm input-qty" value="' + qty + '" ' +
+                (dec ? 'min="0.001" step="0.001" inputmode="decimal"' : 'min="1" step="1"') + '></td>' +
+                priceCell +
+                '</tr>'
+            );
+        }
         $('#tblProductsBarra tbody').append(row);
         row.find('.input-qty').on('change', function () {
             updateRow(row);
@@ -162,7 +218,17 @@ var PosCart = (function () {
                 // Enter dentro del formulario lo enviaría (guardar la venta): aquí solo confirma la cantidad.
                 e.preventDefault();
                 updateRow(row);
-                $('#search_barcode').trigger('focus');
+                backToSearch(this);
+            });
+        }
+        if (quickMode) {
+            // Enter en el precio: confirma el cambio (no envía el formulario)
+            row.find('.input-price').on('keydown', function (e) {
+                if (e.key !== 'Enter') {
+                    return;
+                }
+                e.preventDefault();
+                backToSearch(this);
             });
         }
         row.find('.input-price').on('input', function () {
@@ -200,6 +266,7 @@ var PosCart = (function () {
             var qtyInput = existing.find('.input-qty');
             qtyInput.val(round3((readQty(existing) || 0) + 1));
             updateRow(existing);
+            touchRow(existing);
             return existing;
         }
         var minNeeded = item.allow_decimals ? 0.001 : 1;
@@ -209,6 +276,7 @@ var PosCart = (function () {
         }
         var row = appendRow(item, opt, 1);
         updateTotal();
+        touchRow(row);
         return row;
     }
 
@@ -278,6 +346,7 @@ var PosCart = (function () {
         // options.focusQtyOnSelect: al elegir un producto, el cursor queda en su cantidad (Ventas Rápidas)
         init: function (options) {
             focusQtyOnSelect = !!(options && options.focusQtyOnSelect);
+            quickMode = !!(options && options.quickMode);
             productOptions = JSON.parse($('#product-options').text() || '{}');
             $(document).on('click', '.product_card', function () {
                 var info = cardItem($(this));
@@ -341,6 +410,16 @@ var PosCart = (function () {
             totalFilter = fn;
         },
         refresh: updateTotal,
+        // Cantidad de líneas en el carrito
+        count: function () {
+            return $('#tblProductsBarra tbody tr').length;
+        },
+        // Vacía el carrito
+        clear: function () {
+            $('#tblProductsBarra tbody').empty();
+            updateTotal();
+        },
+        formatPrice: formatPrice,
 
         // Líneas para enviar al servidor (el precio lo vuelve a tomar el servidor del catálogo)
         serialize: function () {

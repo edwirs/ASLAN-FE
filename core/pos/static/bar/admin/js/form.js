@@ -149,8 +149,13 @@ $(function () {
     input_discount_value = $('input[name="discount_value"]');
     input_description = $('input[name="description"]');
 
+    // En táctil no se enfoca ningún campo al abrir: saldría el teclado en pantalla sobre el catálogo.
+    var isTouch = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+
     if ($('#search_barcode').length) {
-        $('#search_barcode').focus();
+        if (!isTouch) {
+            $('#search_barcode').focus();
+        }
         $('#search_barcode').on('keypress', function(e) {
 
             if (e.which === 13) {
@@ -186,30 +191,6 @@ $(function () {
             }
         });
     }
-
-    $('.btn-category').on('click', function () {
-
-        $('.btn-category')
-            .removeClass('btn-primary')
-            .addClass('btn-outline-primary');
-
-        $(this)
-            .removeClass('btn-outline-primary')
-            .addClass('btn-primary');
-
-        const cat = $(this).data('category');
-
-        $('.product_card').each(function () {
-            const productCat = $(this).data('category');
-
-            if (cat === "all" || productCat == cat) {
-                $(this).parent().show();
-            } else {
-                $(this).parent().hide();
-            }
-        });
-
-    });
 
     // Client
 
@@ -435,7 +416,8 @@ $(function () {
         });
 
     // Carrito (producto + presentación): compartido con los pedidos de mesa
-    PosCart.init({focusQtyOnSelect: true});
+    PosCart.init({focusQtyOnSelect: true, quickMode: true});
+    PosQuickUI.init(isTouch);
 
     // Detail products
 
@@ -523,8 +505,12 @@ $(function () {
         params.append('action', 'add');
         params.append('products', JSON.stringify(products));
         var url_refresh = $(this).attr('data-url');
+        var methodText = $.trim($('select[name="paymentmethod"] option:selected').text());
         var args = {
             'params': params,
+            'title': 'Cobrar venta',
+            'content': 'Se registrará la venta por <b>' + PosCart.formatPrice(PosCart.getTotal()) + '</b>' +
+                (methodText ? ' (' + $('<div>').text(methodText).html() + ')' : '') + '. ¿Continuar?',
             'success': function (request) {
                 // La venta ya quedó guardada: se abre el cajón (sin imprimir) y luego se recarga la pantalla.
                 // Si el cajón falla (QZ Tray apagado, etc.) se da tiempo de leer el aviso antes de recargar.
@@ -543,3 +529,270 @@ $(function () {
     });
 
 });
+
+
+// Interfaz de la venta rápida (PC con mouse y teclado, y tablet táctil): búsqueda y filtros del catálogo,
+// vista tarjetas/lista, contador y botón Cobrar, billetes rápidos, atajos y hoja inferior en pantallas angostas.
+var PosQuickUI = (function () {
+    var VIEW_KEY = 'aslan-pos-view';
+    var touch = false;
+    var searchTimer = null;
+
+    function norm(text) {
+        return String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    function currentCategory() {
+        return String($('.btn-category.btn-primary').first().data('category'));
+    }
+
+    // Categoría + texto buscado (todas las palabras deben aparecer en código, nombre o código de barras)
+    function applyFilters() {
+        var cat = currentCategory();
+        var raw = $('#pos_search').val() || '';
+        var terms = norm(raw).split(/\s+/).filter(Boolean);
+        var shown = 0;
+        $('.pq-item').each(function () {
+            var $item = $(this);
+            var ok = cat === 'all' || String($item.data('category')) === cat;
+            if (ok && terms.length) {
+                var hay = $item.data('hay');
+                if (hay === undefined) {
+                    hay = norm($item.attr('data-search'));
+                    $item.data('hay', hay);
+                }
+                ok = terms.every(function (t) { return hay.indexOf(t) !== -1; });
+            }
+            $item.toggle(ok);
+            if (ok) shown++;
+        });
+        $('#pqEmptyGrid').toggle(shown === 0);
+        $('#pqSearchBox').toggleClass('has-text', raw.length > 0);
+    }
+
+    // Con el lector de código de barras activo, el campo principal es el del lector
+    function focusSearch() {
+        var s = ($('#search_barcode').length ? $('#search_barcode') : $('#pos_search'))[0];
+        if (s) {
+            s.focus();
+            s.select();
+        }
+    }
+
+    function setView(view) {
+        view = view === 'list' ? 'list' : 'grid';
+        $('#pqProducts').toggleClass('pq-list', view === 'list');
+        $('.pq-viewtoggle button').each(function () {
+            $(this).toggleClass('active', $(this).data('view') === view);
+        });
+        try { localStorage.setItem(VIEW_KEY, view); } catch (e) { /* sin almacenamiento: se usa la vista por defecto */ }
+    }
+
+    // El panel ocupa el alto de la ventana desde donde empieza (sin barra de scroll de la página)
+    function fitHeight() {
+        var el = document.getElementById('posQuick');
+        if (!el) return;
+        var top = el.getBoundingClientRect().top + window.pageYOffset;
+        el.style.height = Math.max(520, window.innerHeight - top - 40) + 'px';
+    }
+
+    function openSheet(open) {
+        $('#posQuick').toggleClass('pq-open', open);
+    }
+
+    // Billetes rápidos: "Exacto" + los billetes que cubren el total (solo en efectivo)
+    function renderBills(total) {
+        var $b = $('#pqBills');
+        var method = $('select[name="paymentmethod"]').val();
+        if (method !== 'cash' || !(total > 0)) {
+            $b.empty().hide();
+            return;
+        }
+        var set = {};
+        [1000, 2000, 5000, 10000, 20000, 50000, 100000].forEach(function (d) {
+            if (d >= total) set[d] = true;
+        });
+        [5000, 10000, 50000, 100000].forEach(function (step) {
+            set[Math.ceil(total / step) * step] = true;
+        });
+        var values = Object.keys(set).map(Number).filter(function (v) { return v > total; })
+            .sort(function (a, b) { return a - b; }).slice(0, 3);
+        $b.empty().show();
+        $('<button type="button" class="exact"></button>').text('Exacto').attr('data-v', total).appendTo($b);
+        values.forEach(function (v) {
+            $('<button type="button"></button>').text(PosCart.formatPrice(v)).attr('data-v', v).appendTo($b);
+        });
+    }
+
+    function updateChangeBox() {
+        var change = parseFloat($('input[name="change"]').val()) || 0;
+        $('#pqChange').toggleClass('has-change', change > 0);
+        // el campo real conserva el número (se envía al servidor); aquí se muestra como el total: $ 30.000
+        $('#pqChangeText').text(PosCart.formatPrice(change));
+    }
+
+    function onCartChanged(e, payable) {
+        var n = PosCart.count();
+        var money = PosCart.formatPrice(payable || 0);
+        $('#pqCount').text(n + (n === 1 ? ' producto' : ' productos'));
+        $('#pqEmptyCart').toggle(n === 0);
+        $('#pqPay').prop('disabled', n === 0);
+        $('#pqPayAmount').text(money);
+        $('#pqFabCount').text(n);
+        $('#pqFabTotal').text(money);
+        if (n === 0) openSheet(false);
+        renderBills(payable || 0);
+        setTimeout(updateChangeBox, 0);
+    }
+
+    function clearSale() {
+        if (PosCart.count() === 0) return;
+        dialog_action({
+            'content': '¿Quitar todos los productos de la venta?',
+            'success': function () {
+                PosCart.clear();
+                if (!touch) focusSearch();
+            },
+            'cancel': function () {}
+        });
+    }
+
+    function pay() {
+        if (PosCart.count() === 0 || $('.jconfirm').length) return;
+        $('#frmForm').trigger('submit');
+    }
+
+    function typingInField(target) {
+        return $(target).is('input, textarea, select, [contenteditable="true"]');
+    }
+
+    return {
+        init: function (isTouch) {
+            touch = isTouch;
+            var $search = $('#pos_search');
+
+            // cantidad de productos por categoría
+            $('.btn-category').each(function () {
+                var cat = String($(this).data('category'));
+                var n = cat === 'all' ? $('.pq-item').length : $('.pq-item').filter(function () {
+                    return String($(this).data('category')) === cat;
+                }).length;
+                $('<span class="pq-cat-n"></span>').text(n).appendTo(this);
+            });
+
+            $('.btn-category').on('click', function () {
+                $('.btn-category').removeClass('btn-primary').addClass('btn-outline-primary');
+                $(this).removeClass('btn-outline-primary').addClass('btn-primary');
+                applyFilters();
+            });
+
+            $search.on('input', function () {
+                clearTimeout(searchTimer);
+                searchTimer = setTimeout(applyFilters, 90);
+                $('#pqSearchBox').toggleClass('has-text', this.value.length > 0);
+            }).on('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    this.value = '';
+                    applyFilters();
+                    return;
+                }
+                if (e.key !== 'Enter') return;
+                // Enter agrega el producto si solo queda uno (o el código coincide exacto) y limpia la búsqueda
+                e.preventDefault();
+                applyFilters();
+                var typed = norm(this.value).trim();
+                var $visible = $('.pq-item:visible');
+                var $exact = $visible.filter(function () {
+                    return norm($(this).find('.product_card').data('code')) === typed;
+                });
+                var $pick = $exact.length === 1 ? $exact : ($visible.length === 1 ? $visible : $());
+                if ($pick.length) {
+                    this.value = '';
+                    applyFilters();
+                    $pick.find('.product_card').trigger('click');
+                }
+            });
+            $('#pqSearchClear').on('click', function () {
+                $search.val('');
+                applyFilters();
+                if (!touch) focusSearch();
+            });
+
+            // las tarjetas también se activan con el teclado
+            $(document).on('keydown', '.product_card', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    $(this).trigger('click');
+                }
+            });
+
+            // vista tarjetas / lista (se recuerda en este equipo)
+            var saved = 'grid';
+            try { saved = localStorage.getItem(VIEW_KEY) || 'grid'; } catch (e) { /* sin almacenamiento */ }
+            setView(saved);
+            $('.pq-viewtoggle button').on('click', function () { setView($(this).data('view')); });
+
+            // botón del cajón junto a la barra de herramientas
+            $('#btnCashDrawerConfig').removeClass('btn-sm btn-secondary shadow').appendTo('#pqToolsExtra')
+                .html('<i class="fas fa-cash-register"></i><span class="pq-drawer-label"> Cajón <span class="pq-key">(F2)</span></span>');
+
+            // botones − / + de efectivo y propina: de a $1.000
+            ['cash', 'propina', 'nequi_value', 'daviplata_value'].forEach(function (name) {
+                var $i = $('input[name="' + name + '"]');
+                $i.attr('inputmode', 'decimal');
+                $i.trigger('touchspin.updatesettings', {step: 1000, boostat: 99999, maxboostedstep: 1000});
+            });
+
+            // billetes rápidos
+            $('#pqBills').on('click', 'button', function () {
+                $('input[name="cash"]').val((parseFloat($(this).attr('data-v')) || 0).toFixed(2)).trigger('change');
+            });
+            $('select[name="paymentmethod"]').on('change', function () { renderBills(PosCart.getTotal()); });
+            $('#pqCart').on('change input click', function () { setTimeout(updateChangeBox, 0); });
+
+            // contador, total del botón y estado vacío
+            $(document).on('poscart:changed', onCartChanged);
+            onCartChanged(null, PosCart.getTotal());
+
+            // hoja inferior (tablet vertical)
+            $('#pqFab').on('click', function () { openSheet(true); });
+            $('#pqCloseCart').on('click', function () { openSheet(false); });
+            $(document).on('poscart:changed', function () {
+                $('#pqFab').removeClass('pq-bump');
+                if (PosCart.count() > 0) {
+                    void document.getElementById('pqFab').offsetWidth;
+                    $('#pqFab').addClass('pq-bump');
+                }
+            });
+
+            $('#pqClear').on('click', clearSale);
+
+            // atajos: / o F3 buscar · F4 cobrar · F7 vaciar · Esc cierra la hoja (F2, el cajón, lo maneja cash_drawer.js)
+            $(document).on('keydown', function (e) {
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
+                if (e.key === 'F4') {
+                    e.preventDefault();
+                    pay();
+                } else if (e.key === 'F7') {
+                    e.preventDefault();
+                    clearSale();
+                } else if (e.key === 'F3' || (e.key === '/' && !typingInField(e.target))) {
+                    e.preventDefault();
+                    openSheet(false);
+                    focusSearch();
+                } else if (e.key === 'Escape' && $('#posQuick').hasClass('pq-open') && !$('.jconfirm, .modal.show').length) {
+                    openSheet(false);
+                }
+            });
+
+            fitHeight();
+            $(window).on('resize orientationchange', fitHeight);
+            setTimeout(fitHeight, 300);
+
+            if (!touch && !$('#search_barcode').length) {
+                focusSearch();
+            }
+            applyFilters();
+        }
+    };
+})();

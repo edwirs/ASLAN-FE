@@ -1,7 +1,7 @@
 {% extends 'form.html' %}
 
 {% block body_class %}
-sidebar-collapse
+sidebar-collapse pos-quick-page
 {% endblock %}
 
 {% load widget_tweaks %}
@@ -9,6 +9,7 @@ sidebar-collapse
 {% load l10n %}
 {% block assets_form %}
     <link href="{% static 'css/style.css' %}" rel="stylesheet"></link>
+    <link href="{% static 'css/pos-quick.css' %}?v=20261117l" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'lib/jquery-ui-1.12.1/jquery-ui.css' %}"/>
     <script src="{% static 'lib/jquery-ui-1.12.1/jquery-ui.min.js' %}"></script>
     <script src="{% static 'lib/select2-4.0.13/js/select2.min.js' %}"></script>
@@ -29,205 +30,232 @@ sidebar-collapse
         <label class="form-label fw-bold">{{ form.date_joined.label }}:</label>
         {{ form.date_joined }}
     </div>
-
 </div>
 
-<div class="row gx-3 align-items-stretch">
-    <div class="col-lg-7">
-        <div class="card border p-3 mb-4 h-100">
+<div class="pos-quick" id="posQuick">
+
+    {# ============ Catálogo ============ #}
+    <section class="pq-main" aria-label="Productos">
+        <div class="pq-toolbar">
+            <h2 class="pq-title"><i class="fas fa-bolt"></i> Venta rápida</h2>
+            {# Con el lector de código de barras activo, ese campo es el principal y el buscador por nombre se oculta #}
+            <div class="pq-search" id="pqSearchBox"{% if company.enable_barcode_reader %} hidden{% endif %}>
+                <i class="fas fa-search"></i>
+                <input type="search" id="pos_search" placeholder="Buscar producto o código" autocomplete="off"
+                       aria-label="Buscar producto" enterkeyhint="search">
+                <button type="button" class="pq-clear" id="pqSearchClear" aria-label="Borrar búsqueda"><i class="fas fa-times"></i></button>
+            </div>
             {% if company.enable_barcode_reader %}
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <input type="text" id="search_barcode" class="form-control" placeholder="Escanee el código de barras">
-                    </div>
+                <div class="pq-search pq-search-barcode">
+                    <i class="fas fa-barcode"></i>
+                    <input type="text" id="search_barcode" placeholder="Escanee el código de barras" autocomplete="off" aria-label="Escanear código de barras">
                 </div>
             {% endif %}
-            <!-- Categorías -->
-            <div class="mb-3 d-flex flex-wrap gap-2">
-                <button type="button" class="btn btn-sm btn-primary btn-category" data-category="all">Todos</button>
-                {% for cat in categories %}
-                    <button type="button" class="btn btn-sm btn-outline-primary btn-category"
-                            data-category="{{ cat.id }}">
-                        {{ cat.name }}
-                    </button>
-                {% endfor %}
+            <div class="pq-tools">
+                <div class="pq-viewtoggle" role="group" aria-label="Vista de productos">
+                    <button type="button" data-view="grid" class="active" title="Tarjetas" aria-label="Ver como tarjetas"><i class="fas fa-th-large"></i></button>
+                    <button type="button" data-view="list" title="Lista" aria-label="Ver como lista"><i class="fas fa-list"></i></button>
+                </div>
+                <span id="pqToolsExtra"></span>
             </div>
-            <div class="products-scroll">
-                <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-3" id="product-list">
-                    {% for entry in products_grouped %}
-                        {% with product=entry.product %}
-                            <div class="col">
-                                <div class="card h-100 product_card 
-                                    {% if entry.total_stock == 0 and not product.is_service %}card-no-stock{% else %}card-outline card-success{% endif %}"
-                                    style="cursor: pointer;"
-                                    data-id="{{ product.id }}"
-                                    data-code="{{ product.code }}"
-                                    data-name="{{ product.name }}"
-                                    data-price="{{ product.pvp|unlocalize }}"
-                                    data-category="{{ product.category_id }}"
-                                    data-stock="{{ entry.total_stock|unlocalize }}"
-                                    data-is_service="{{ product.is_service }}"
-                                    data-unit="{{ product.unit_name }}"
-                                    data-decimals="{{ product.allow_decimals|yesno:'true,false' }}"
-                                    >
-                                    <div class="card-body" style="font-size: 14px;">
-                                        <div class="product-thumb" style="position:relative; width:100%; height:90px; overflow:hidden; border-radius:.35rem; background:#f4f6f9; margin-bottom:.5rem;">
-                                            {% if product.image %}
-                                                <img src="{{ product.get_image }}" alt="" loading="lazy"
-                                                     style="position:absolute; top:0; left:0; width:100%; height:100%; max-width:100%; object-fit:cover;"
-                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                                <span class="product-thumb-icon" style="display:none; position:absolute; inset:0; align-items:center; justify-content:center; font-size:30px; color:#adb5bd;"><i class="fas {% if product.is_service %}fa-concierge-bell{% else %}fa-box{% endif %}"></i></span>
-                                            {% else %}
-                                                <span class="product-thumb-icon" style="display:flex; position:absolute; inset:0; align-items:center; justify-content:center; font-size:30px; color:#adb5bd;"><i class="fas {% if product.is_service %}fa-concierge-bell{% else %}fa-box{% endif %}"></i></span>
-                                            {% endif %}
-                                        </div>
-                                        <h5 class="card-title">{{ product.code }}</h5>
-                                        <p class="card-text fw-bold">{{ product.name }}</p>
-                                        {% if entry.total_stock == 0 and not product.is_service %}
-                                            <small class="text-danger fw-bold">Producto sin stock</small>
-                                        {% elif product.id in product_options %}
-                                            <small class="badge bg-info"><i class="fas fa-boxes-stacked"></i> Varias presentaciones</small>
-                                        {% endif %}
+        </div>
+
+        <div class="pq-cats" id="pqCats">
+            <button type="button" class="btn btn-sm btn-primary btn-category" data-category="all">Todos</button>
+            {% for cat in categories %}
+                <button type="button" class="btn btn-sm btn-outline-primary btn-category" data-category="{{ cat.id }}">{{ cat.name }}</button>
+            {% endfor %}
+        </div>
+
+        <div class="pq-grid-wrap">
+            <div class="pq-grid" id="pqProducts">
+                {% for entry in products_grouped %}
+                    {% with product=entry.product %}
+                        <div class="pq-item" data-category="{{ product.category_id }}"
+                             data-search="{{ product.code }} {{ product.name }} {{ product.barcode|default_if_none:'' }}">
+                            <div class="product_card {% if entry.total_stock == 0 and not product.is_service %}pq-out{% endif %}"
+                                 tabindex="0" role="button"
+                                 aria-label="{{ product.name }}"
+                                 data-id="{{ product.id }}"
+                                 data-code="{{ product.code }}"
+                                 data-name="{{ product.name }}"
+                                 data-price="{{ product.pvp|unlocalize }}"
+                                 data-category="{{ product.category_id }}"
+                                 data-stock="{{ entry.total_stock|unlocalize }}"
+                                 data-is_service="{{ product.is_service }}"
+                                 data-unit="{{ product.unit_name }}"
+                                 data-decimals="{{ product.allow_decimals|yesno:'true,false' }}">
+                                {% if product.is_service %}
+                                {% elif entry.total_stock == 0 %}
+                                    <span class="pq-chip out">Agotado</span>
+                                {% elif entry.total_stock <= 5 %}
+                                    <span class="pq-chip low">Quedan {{ entry.total_stock|floatformat:"-3" }}</span>
+                                {% else %}
+                                    <span class="pq-chip">Stock {{ entry.total_stock|floatformat:"-3" }}</span>
+                                {% endif %}
+                                {% if product.image %}
+                                    <div class="pq-thumb">
+                                        <img src="{{ product.get_image }}" alt="" loading="lazy" onerror="this.parentNode.remove()">
                                     </div>
+                                {% endif %}
+                                <div class="pq-body">
+                                    <div class="pq-code">{{ product.code }}</div>
+                                    <div class="pq-name">{{ product.name }}</div>
+                                    {% if product.id in product_options %}
+                                        <div class="pq-pres"><i class="fas fa-layer-group"></i> Varias presentaciones</div>
+                                    {% endif %}
+                                    <div class="pq-price">${{ product.pvp|floatformat:"-2g" }}</div>
                                 </div>
                             </div>
-                        {% endwith %}
-                    {% endfor %}
-                </div>   
-            </div>        
+                        </div>
+                    {% endwith %}
+                {% endfor %}
+            </div>
+            <div class="pq-empty-grid" id="pqEmptyGrid">
+                <i class="fas fa-box-open"></i>
+                No hay productos que coincidan con la búsqueda.
+            </div>
         </div>
-    </div>
+    </section>
 
-    <div class="col-lg-5">
-        <div class="card border p-3 mb-4 h-100">
-            <div class="table-responsive" style="max-height: 210px; overflow-y: auto;">
-                <table class="table table-bordered table-header-pos" id="tblProductsBarra"{% if perms.pos.edit_sale_price %} data-edit-price="1"{% endif %}>
-                    <thead>
-                    <tr style="border: none;">
-                        <th class="" style="width: 50%;">Producto</th>
-                        <th class="" style="width: 20%;">Cantidad</th>
-                        <th class="" style="width: 30%;">Precio</th>
-                    </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-            
-            <div class="card bg-light mb-3">
-                <div class="card-body text-center">
-                    <label class="fw-bolder text-muted mb-1">TOTAL A PAGAR</label>
-                    <div class="display-6 fw-bold text-success">
-                        {{ form.total }}
-                    </div>
-                </div>
-            </div>
+    {# ============ Venta actual ============ #}
+    <aside class="pq-cart" id="pqCart" aria-label="Venta actual">
+        <div class="pq-cart-head">
+            <h3><i class="fas fa-shopping-basket"></i> Venta actual</h3>
+            <span class="pq-count" id="pqCount">0 productos</span>
+            <span class="pq-spacer"></span>
+            <button type="button" class="pq-btn-ghost" id="pqClear" title="Vaciar la venta"><i class="fas fa-trash-alt"></i> Vaciar</button>
+            <button type="button" class="pq-btn-ghost pq-btn-close" id="pqCloseCart" aria-label="Cerrar la venta"><i class="fas fa-chevron-down"></i></button>
+        </div>
 
-            <!-- Switches de Descuento y Cortesía -->
+        <div class="pq-lines">
+            <table class="table" id="tblProductsBarra"{% if perms.pos.edit_sale_price %} data-edit-price="1"{% endif %}>
+                <tbody></tbody>
+            </table>
+            <div class="pq-empty-cart" id="pqEmptyCart">
+                <i class="fas fa-hand-pointer"></i>
+                <div class="fw-bold">La venta está vacía</div>
+                <small>Toque un producto para agregarlo</small>
+            </div>
+        </div>
+
+        <div class="pq-total">
+            <label for="id_total">Total a pagar</label>
+            {{ form.total }}
+        </div>
+
+        <div class="pq-pay">
             {% if perms.pos.discounts_sale %}
-                <div class="mb-3 row">
-                    <div class="col-6 d-flex justify-content-center align-items-center">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="switchDescuento" name="switchDescuento">
-                            <label class="form-check-label" for="switchDescuento">Descuento</label>
-                        </div>
+                <div class="pq-switches">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="switchDescuento" name="switchDescuento">
+                        <label class="form-check-label" for="switchDescuento">Descuento</label>
                     </div>
-                    <div class="col-6 d-flex justify-content-center align-items-center">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="switchCortesia" name="switchCortesia">
-                            <label class="form-check-label" for="switchCortesia">Cortesía</label>
-                        </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="switchCortesia" name="switchCortesia">
+                        <label class="form-check-label" for="switchCortesia">Cortesía</label>
                     </div>
                 </div>
 
-                <div class="mb-3 autorization_discount w-100" id="discount">
-                    <label class="form-label fw-bold">{{ form.autorization_discount.label }}:</label>
+                <div class="mb-2 autorization_discount w-100" id="discount">
+                    <label class="form-label">{{ form.autorization_discount.label }}</label>
                     {{ form.autorization_discount }}
                 </div>
 
-                <div class="mb-3 discount_value w-100" id="discount_value">
-                    <label class="form-label fw-bold">{{ form.discount_value.label }}:</label>
+                <div class="mb-2 discount_value w-100" id="discount_value">
+                    <label class="form-label">{{ form.discount_value.label }}</label>
                     {{ form.discount_value }}
                 </div>
 
-                <div class="mb-3 description w-100" id="description">
-                    <label class="form-label fw-bold">{{ form.description.label }}</label>
+                <div class="mb-2 description w-100" id="description">
+                    <label class="form-label">{{ form.description.label }}</label>
                     {{ form.description }}
                 </div>
             {% endif %}
 
-            <div class="row mb-3">
-                <div class="col">
-                    <label class="form-label fw-bold">{{ form.paymentmethod.label }}:</label>
+            <div class="row g-2">
+                <div class="col mb-2">
+                    <label class="form-label">{{ form.paymentmethod.label }}</label>
                     {{ form.paymentmethod }}
                 </div>
-                <div class="col">
-                    <label class="form-label fw-bold">{{ form.transfermethods.label }}:</label>
+                <div class="col mb-2">
+                    <label class="form-label">{{ form.transfermethods.label }}</label>
                     {{ form.transfermethods }}
                 </div>
             </div>
 
-            <div class="row mb-3">
-                <div class="col">
-                    <label class="form-label fw-bold">{{ form.cash.label }}:</label>
-                    {{ form.cash }}
-                </div>
-                <div class="col">
-                    <label class="form-label fw-bold">{{ form.propina.label }}:</label>
-                    {{ form.propina }}
-                </div>
-            </div>
-
-            <div class="row mb-3">
-                <div class="col">
-                    <label class="form-label fw-bold">{{ form.nequi_value.label }}:</label>
+            <div class="row g-2">
+                <div class="col mb-2">
+                    <label class="form-label">{{ form.nequi_value.label }}</label>
                     {{ form.nequi_value }}
                 </div>
-                <div class="col">
-                    <label class="form-label fw-bold">{{ form.daviplata_value.label }}:</label>
+                <div class="col mb-2">
+                    <label class="form-label">{{ form.daviplata_value.label }}</label>
                     {{ form.daviplata_value }}
                 </div>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label fw-bold">{{ form.change.label }}:</label>
-                {{ form.change }}
+            <div class="row g-2">
+                <div class="col">
+                    <label class="form-label">{{ form.cash.label }}</label>
+                    {{ form.cash }}
+                </div>
+                <div class="col">
+                    <label class="form-label">{{ form.propina.label }}</label>
+                    {{ form.propina }}
+                </div>
             </div>
+            <div class="pq-bills" id="pqBills" aria-label="Billetes rápidos"></div>
 
-            <div class="d-grid gap-2">
-                <button type="submit" class="btn btn-success btn-lg">
-                    <i class="fas fa-cash-register"></i> Generar Venta
-                </button>
-
-                <a href="{{ list_url }}" class="btn btn-outline-danger">
-                    Cancelar
-                </a>
+            <div class="pq-change" id="pqChange">
+                <label>{{ form.change.label }}</label>
+                {# El campo real (cambio) se envía con el formulario; se oculta y se muestra formateado en #pqChangeText #}
+                {{ form.change }}
+                <span class="pq-change-text" id="pqChangeText">$ 0</span>
             </div>
         </div>
-    </div>
 
-    <!-- Totales -->
-    <div class="col-12 card border p-3 mb-4 d-none">
-        <div class="row">
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.subtotal_0.label|upper }}</label>
-                {{ form.subtotal_0 }}
-            </div>
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.iva.label|upper }}</label>
-                {{ form.iva }}
-            </div>
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.total_iva.label|upper }}</label>
-                {{ form.total_iva }}
-            </div>
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.dscto.label|upper }}</label>
-                {{ form.dscto }}
-            </div>
-            <div class="col-12 col-md mb-2">
-                <label class="form-label fw-bold w-100">{{ form.total_dscto.label|upper }}</label>
-                {{ form.total_dscto }}
-            </div>
+        <div class="pq-action">
+            <button type="submit" class="pq-pay-btn" id="pqPay" disabled>
+                <i class="fas fa-cash-register"></i>
+                <span>Cobrar <span id="pqPayAmount">$ 0</span></span>
+                <kbd>F4</kbd>
+            </button>
+            <div class="pq-hints"><kbd>/</kbd> buscar &middot; <kbd>F4</kbd> cobrar &middot; <kbd>F7</kbd> vaciar &middot; <kbd>F2</kbd> cajón</div>
+        </div>
+    </aside>
+
+    {# Botón para abrir la venta en pantallas angostas (tablet vertical) #}
+    <button type="button" class="pq-fab" id="pqFab" aria-label="Ver la venta actual">
+        <i class="fas fa-shopping-basket"></i>
+        <span class="pq-fab-label">Ver venta</span>
+        <span class="pq-fab-count" id="pqFabCount">0</span>
+        <span id="pqFabTotal">$ 0</span>
+    </button>
+</div>
+
+<!-- Totales -->
+<div class="col-12 card border p-3 mb-4 d-none">
+    <div class="row">
+        <div class="col-12 col-md mb-2">
+            <label class="form-label fw-bold w-100">{{ form.subtotal_0.label|upper }}</label>
+            {{ form.subtotal_0 }}
+        </div>
+        <div class="col-12 col-md mb-2">
+            <label class="form-label fw-bold w-100">{{ form.iva.label|upper }}</label>
+            {{ form.iva }}
+        </div>
+        <div class="col-12 col-md mb-2">
+            <label class="form-label fw-bold w-100">{{ form.total_iva.label|upper }}</label>
+            {{ form.total_iva }}
+        </div>
+        <div class="col-12 col-md mb-2">
+            <label class="form-label fw-bold w-100">{{ form.dscto.label|upper }}</label>
+            {{ form.dscto }}
+        </div>
+        <div class="col-12 col-md mb-2">
+            <label class="form-label fw-bold w-100">{{ form.total_dscto.label|upper }}</label>
+            {{ form.total_dscto }}
         </div>
     </div>
 </div>
@@ -261,14 +289,13 @@ sidebar-collapse
     </div>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="{% static 'pos/js/cart.js' %}"></script>
+    <script src="{% static 'pos/js/cart.js' %}?v=20261117l"></script>
     <script src="{% static 'pos/js/payment.js' %}"></script>
-    <script src="{% static 'bar/admin/js/form.js' %}?v=20261112"></script>
+    <script src="{% static 'bar/admin/js/form.js' %}?v=20261117l"></script>
     <script type="application/javascript">
         sale.detail.iva = {{ company.iva|safe }};
         $(function () {
             sale.listProducts();
-            $('#search_product').focus();
         });
 
     </script>
