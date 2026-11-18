@@ -27,11 +27,11 @@
 }
 
 .dark-mode .pos-quick {
-    --pq-bg: #343a40;
-    --pq-bg-soft: #2b3035;
-    --pq-border: #4b545c;
-    --pq-text: #e9ecef;
-    --pq-muted: #adb5bd;
+    --pq-bg: var(--dk-superficie, #12233a);
+    --pq-bg-soft: var(--dk-elevado, #182c47);
+    --pq-border: var(--dk-borde, #21385a);
+    --pq-text: var(--dk-texto, #e3eaf3);
+    --pq-muted: var(--dk-texto-2, #9db0c8);
     --pq-brand-soft: #4a3526;
     --pq-ok: #5fd39a;
     --pq-ok-soft: #1f3a2e;
@@ -140,7 +140,7 @@
     border-radius: 999px; background: rgba(255, 255, 255, .92); color: var(--pq-muted); border: 1px solid var(--pq-border);
     max-width: calc(100% - 12px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.dark-mode .pq-chip { background: rgba(52, 58, 64, .92); }
+.dark-mode .pq-chip { background: rgba(18, 35, 58, .92); }
 .pq-chip.low { background: var(--pq-warn-soft); color: var(--pq-warn); border-color: transparent; }
 .pq-chip.out { background: var(--pq-bad); color: #fff; border-color: transparent; }
 .pq-pres { font-size: .7rem; color: #0a6c80; font-weight: 600; margin-bottom: 2px; }

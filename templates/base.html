@@ -89,10 +89,16 @@
     href="{% static 'lib/adminlte-3.2.0/css/adminlte.min.css'%}"
   ></link>
 
-  <!-- Tema oscuro (ajustes de los componentes propios) -->
+  <!-- Tema oscuro «azul noche» (ajustes de los componentes propios) -->
   <link
     rel="stylesheet"
-    href="{% static 'css/dark-mode.css' %}"
+    href="{% static 'css/dark-mode.css' %}?v=20261118b"
+  ></link>
+
+  <!-- Menú lateral (azul marino, opción actual resaltada, submenús con línea guía) -->
+  <link
+    rel="stylesheet"
+    href="{% static 'css/sidebar.css' %}?v=20261118b"
   ></link>
 
   <!-- Theme js -->
@@ -363,10 +369,11 @@
   <script src="{% static 'lib/bootstrap-daterangepicker-3.1/js/moment.min.js' %}"></script>
   <script src="{% static 'lib/bootstrap-daterangepicker-3.1/js/moment-with-locales.js' %}"></script>
   <!-- utils -->
+  <script src="{% static 'js/sidebar.js' %}?v=20261118"></script>
   <script src="{% static 'js/main.js' %}"></script>
   {# El número de versión obliga al navegador a bajar el archivo nuevo: súbalo cada vez que cambie functions.js #}
   <script src="{% static 'js/functions.js' %}?v=20261112"></script>
-  <script src="{% static 'js/theme.js' %}"></script>
+  <script src="{% static 'js/theme.js' %}?v=20261118"></script>
   <!-- REQUIRED SCRIPTS -->
 
   <!-- AdminLTE App -->
