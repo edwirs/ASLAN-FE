@@ -346,7 +346,14 @@
                 <div class="form-group mb-3">
                     <label class="label-dark">Seleccionar archivo(s) PDF:</label>
                     <input class="form-control-file" type="file" id="form-file-multi" name="pdf_files" accept="application/pdf,.pdf" multiple>
-                    <small class="form-text text-muted">Puede seleccionar múltiples archivos PDF manteniendo presionada la tecla Ctrl.</small>
+                    <small class="form-text text-muted">Puede seleccionar múltiples archivos PDF manteniendo presionada la tecla Ctrl.
+                        Máximo 5 MB por archivo. Los documentos se guardan 90 días con la factura y se envían por correo cada vez que se envía.</small>
+                </div>
+
+                <div id="pdfExisting" class="mb-3 d-none">
+                    <label class="label-dark">Documentos ya guardados en la factura:</label>
+                    <ul class="list-group" id="pdfExistingList"></ul>
+                    <small class="form-text text-muted">Los que quite aquí se eliminan al guardar los cambios.</small>
                 </div>
 
                 <div id="pdfMainContainer" class="d-none">
@@ -423,7 +430,7 @@
     {{ company_info|json_script:"company-info-data" }}
     {% if edit_sale %}{{ edit_sale|json_script:"edit-sale-data" }}{% endif %}
     <!-- Archivo JS externo referenciado -->
-    <script src="{% static 'salefe/admin/js/form.js' %}?v=20261113"></script>
+    <script src="{% static 'salefe/admin/js/form.js' %}?v=20261118b"></script>
     <iframe id="print_frame" style="display:none;"></iframe>
     {% include 'cashdrawer/widget.html' with source='salefe' %}
 {% endblock %}

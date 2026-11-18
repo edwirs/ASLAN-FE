@@ -296,12 +296,16 @@
             <td style="width: 50%; padding-right: 5px;">
                 <p class="fw-bold" style="margin: 0 0 3px 0; font-size: 9pt;">Tipo de operación</p>
                 <p style="margin: 0; color: #6c757d; font-size: 9pt;">Estándar</p>
-                {% if sale.attachment %}
+                {% with attachments=sale.get_attachments %}
+                {% if attachments %}
                     <p class="fw-bold" style="margin: 0 0 3px 0; font-size: 9pt;">Archivos Adjuntos:</p>
-                    <p style="margin: 0; color: #6c757d; font-size: 8.5pt;">
-                        {{ sale.attachment.name|cut:"sales/attachments/" }}
-                    </p>
+                    {% for attached in attachments %}
+                        <p style="margin: 0; color: #6c757d; font-size: 8.5pt;">
+                            {% if attached.get_name %}{{ attached.get_name }}{% else %}{{ attached.name|cut:"sales/attachments/" }}{% endif %}
+                        </p>
+                    {% endfor %}
                 {% endif %}
+                {% endwith %}
             </td>
             <td style="width: 50%; padding-left: 5px;">
                 <p class="fw-bold" style="margin: 0 0 3px 0; font-size: 9pt;">Detalles de Pago</p>

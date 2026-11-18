@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
 from core.services.factus import download_invoice_xml, download_invoice_pdf, download_credit_note_xml
+from core.pos.attachments import RETENTION_DAYS
 from core.pos.models import Company
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,9 @@ def image_to_data_uri(image_field):
         logger.exception('No se pudo preparar la imagen para el PDF')
         return None
 
-def send_sale_electronic_invoice_email(sale, request=None, target_email=None):
+def send_sale_electronic_invoice_email(sale, request=None, target_email=None, extra_files=None):
+    """Envía la factura (PDF + XML) y sus documentos anexos. ``extra_files``: archivos subidos en este reenvío; van solo
+    en este correo y no se guardan en el servidor."""
     if sale.email_sent_count >= 4:
         return {
             "success": False,
@@ -94,20 +97,32 @@ def send_sale_electronic_invoice_email(sale, request=None, target_email=None):
             mimetype="application/pdf"
         )
 
-        # 3. Adjuntar múltiples archivos enviados desde el formulario
-        if request and hasattr(request, 'FILES') and 'pdf_files' in request.FILES:
-            files_list = request.FILES.getlist('pdf_files')
-            for file in files_list:
-                content_type = getattr(file, 'content_type', 'application/octet-stream')
-                # REINICIAR EL PUNTERO POR SEGURIDAD
-                file.seek(0)
-                file_content = file.read()
-                if len(file_content) > 0:
-                    email.attach(file.name, file_content, content_type)
-                else:
-                    print(f"--- [ADVERTENCIA] El archivo {file.name} está vacío o ya fue leído. ---")
-        else:
-            print("--- [DEBUG SERVICE] ADVERTENCIA: No se encontraron 'pdf_files' en request.FILES o request es None. ---")
+        # 3. Documentos anexos de la factura (los guardados al registrarla): van en cada envío, también en los reenvíos
+        for stored in sale.get_attachments():
+            field = getattr(stored, 'file', stored)
+            name = stored.get_name() if hasattr(stored, 'get_name') else os.path.basename(field.name)
+            try:
+                field.open('rb')
+                try:
+                    content = field.read()
+                finally:
+                    field.close()
+            except Exception:
+                logger.exception('No se pudo leer el anexo %s de la factura %s', name, sale.id)
+                return {
+                    "success": False,
+                    "message": f'No se pudo leer el documento anexo «{name}»: no se envió el correo. '
+                               f'Edite la factura y vuelva a cargarlo.',
+                }
+            if content:
+                email.attach(name, content, guess_type(name)[0] or 'application/octet-stream')
+
+        # 4. Archivos que se adjuntan al reenviar (no se guardan)
+        for uploaded in extra_files or []:
+            uploaded.seek(0)
+            content = uploaded.read()
+            if content:
+                email.attach(os.path.basename(uploaded.name), content, 'application/pdf')
 
         # Enviar correo
         email.send(fail_silently=False)
@@ -116,9 +131,14 @@ def send_sale_electronic_invoice_email(sale, request=None, target_email=None):
         sale.email_sent_count += 1
         sale.save(update_fields=['email_sent_count'])
 
+        message = f"Correo enviado exitosamente (Envío {sale.email_sent_count} de 4)."
+        purged = sale.get_purged_attachment_names()
+        if purged:
+            message += (f" Los documentos anexos ({', '.join(purged)}) ya no están guardados y no se incluyeron "
+                        f"(se eliminan a los {RETENTION_DAYS} días).")
         return {
-            "success": True, 
-            "message": f"Correo enviado exitosamente (Envío {sale.email_sent_count} de 4)."
+            "success": True,
+            "message": message
         }
 
     except Exception as e:

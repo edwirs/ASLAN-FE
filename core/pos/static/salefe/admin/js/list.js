@@ -395,6 +395,22 @@ $(function () {
                         return message_error(data.error);
                     }
                     $('#resendClientName').val(data.client_name);
+                    // Anexos guardados con la factura (se envían solos) o ya eliminados; y archivos nuevos opcionales
+                    var att = data.attachments || {available: [], purged: []};
+                    var esc = function (n) { return $('<div>').text(n).html(); };
+                    var info = [];
+                    if (att.available.length) {
+                        info.push('<i class="fas fa-paperclip"></i> Se enviarán con la factura: <b>' +
+                            att.available.map(esc).join(', ') + '</b>.');
+                    }
+                    if (att.purged.length) {
+                        info.push('<i class="fas fa-triangle-exclamation"></i> Estos anexos ya no están guardados (se eliminan a los ' +
+                            att.days + ' días): <b>' + att.purged.map(esc).join(', ') +
+                            '</b>. Si los necesita, adjúntelos de nuevo abajo.');
+                    }
+                    $('#resendAttachInfo').toggleClass('d-none', !info.length).html(info.join('<br>'));
+                    $('#resendFiles').val('');
+                    $('#resendFilesHint').text('Solo PDF de hasta ' + (att.max_mb || 5) + ' MB cada uno. Van únicamente en este correo; no se guardan.');
                     var $list = $('#resendEmailList').empty();
                     if (!data.emails.length) {
                         $list.append('<p class="text-muted mb-0">Este cliente no tiene correos electrónicos registrados.</p>');
@@ -424,11 +440,21 @@ $(function () {
         if (!email) {
             return message_error('Seleccione un correo de destino');
         }
+        var params = new FormData();
+        params.append('action', 'resend_email');
+        params.append('id', id);
+        params.append('email', email);
+        var files = document.getElementById('resendFiles').files;
+        for (var i = 0; i < files.length; i++) {
+            params.append('pdf_files', files[i]);
+        }
         $.ajax({
             url: pathname,
             type: 'POST',
             headers: {'X-CSRFToken': csrftoken},
-            data: {action: 'resend_email', id: id, email: email},
+            data: params,
+            processData: false,
+            contentType: false,
             dataType: 'json',
             success: function (data) {
                 if (data.error) {

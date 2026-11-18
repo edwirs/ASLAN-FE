@@ -9,10 +9,12 @@ Son tres pasos separados a propósito:
 """
 import json
 import logging
+import os
 
 from django.db import DatabaseError, transaction
 
-from core.pos.models import Client, Company, CreditNote, Product, ProductAutoAdd, Sale, SaleDetail
+from core.pos import attachments
+from core.pos.models import Client, Company, CreditNote, Product, ProductAutoAdd, Sale, SaleAttachment, SaleDetail
 from core.pos.sale_deletion import restore_detail_stock
 from core.pos.stock_lines import parse_quantity
 from core.services import factus
@@ -57,6 +59,12 @@ def save_from_request(request, sale=None):
     descontado sus líneas, las reemplaza por las del formulario y recalcula todo, en una sola transacción.
     """
     post = request.POST
+    # Los anexos se revisan antes de tocar nada: un PDF muy pesado o de otro tipo detiene todo el guardado
+    for uploaded in request.FILES.getlist('pdf_files'):
+        try:
+            attachments.validate_pdf(uploaded)
+        except ValueError as exc:
+            raise SaleFeError(str(exc))
     with transaction.atomic():
         if sale is not None:
             sale = Sale.objects.select_for_update().get(pk=sale.pk)
@@ -124,10 +132,19 @@ def save_from_request(request, sale=None):
         sale.calculate_detail()
         sale.calculate_invoice()
 
-        files_list = request.FILES.getlist('pdf_files')
-        if files_list:
-            sale.attachment = files_list[0]
-            sale.save(update_fields=['attachment'])
+        # Documentos anexos: se guardan todos (quedan con la factura para cada envío de correo). Al editar, los que se
+        # quitaron en el formulario se eliminan y los nuevos se suman a los que ya tenía.
+        sale.ensure_attachment_rows()
+        try:
+            remove_ids = [int(x) for x in json.loads(post.get('remove_attachments') or '[]')]
+        except (ValueError, TypeError):
+            remove_ids = []
+        if remove_ids:
+            for attachment in SaleAttachment.objects.filter(sale=sale, pk__in=remove_ids):
+                attachment.file.delete(save=False)
+                attachment.delete()
+        for uploaded in request.FILES.getlist('pdf_files'):
+            SaleAttachment.objects.create(sale=sale, file=uploaded, name=os.path.basename(uploaded.name))
     return sale
 
 

@@ -4,6 +4,8 @@ from datetime import datetime
 from django.db import models
 from django.db.models import Sum, FloatField
 from django.db.models.functions import Coalesce
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.forms import model_to_dict
 from decimal import Decimal, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
@@ -589,11 +591,69 @@ class Sale(models.Model):
 
         return item
 
+    def ensure_attachment_rows(self):
+        """Pasa el archivo del campo antiguo ``attachment`` a ``SaleAttachment`` (una sola vez) para poder
+        listarlo, quitarlo o sumarle más anexos."""
+        if self.attachment and not self.attachments.exists():
+            SaleAttachment.objects.create(sale=self, file=self.attachment.name, name=os.path.basename(self.attachment.name))
+
+    def get_attachments(self):
+        """Documentos anexos disponibles de la factura: los de ``SaleAttachment`` que no se han eliminado y, en facturas
+        antiguas que solo guardaban un archivo, el campo ``attachment``."""
+        if self.attachments.exists():
+            return list(self.attachments.filter(purged_at__isnull=True))
+        if self.attachment:
+            return [self.attachment]
+        return []
+
+    def get_purged_attachment_names(self):
+        """Nombres de los anexos que ya se eliminaron (pasaron los días de conservación)."""
+        return [a.get_name() for a in self.attachments.filter(purged_at__isnull=False)]
+
     class Meta:
         verbose_name = 'Venta'
         verbose_name_plural = 'Ventas'
         default_permissions = ()
         permissions = perms_for('pos.Sale')
+
+
+class SaleAttachment(models.Model):
+    """Documento anexo (PDF) de una factura: se envía por correo junto con la factura cada vez que se envía.
+    Pasados ``attachments.RETENTION_DAYS`` días el archivo se elimina del servidor (``purge``); la fila queda para poder
+    avisar que ya no está."""
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name='attachments')
+    file = models.FileField(upload_to='sales/attachments/', blank=True, verbose_name='Archivo')
+    name = models.CharField(max_length=255, blank=True, verbose_name='Nombre original')
+    created = models.DateTimeField(auto_now_add=True)
+    purged_at = models.DateTimeField(null=True, blank=True, verbose_name='Eliminado el')
+
+    def __str__(self):
+        return self.get_name()
+
+    def get_name(self):
+        return self.name or (os.path.basename(self.file.name) if self.file else '')
+
+    def purge(self):
+        """Borra el archivo del disco y deja constancia (se conserva el nombre para avisar al reenviar)."""
+        if not self.name and self.file:
+            self.name = os.path.basename(self.file.name)
+        if self.file:
+            self.file.delete(save=False)
+        self.purged_at = timezone.now()
+        self.save()
+
+    class Meta:
+        verbose_name = 'Anexo de venta'
+        verbose_name_plural = 'Anexos de ventas'
+        default_permissions = ()
+        ordering = ['id']
+
+
+@receiver(post_delete, sender=SaleAttachment)
+def delete_attachment_file(sender, instance, **kwargs):
+    """Al borrar la fila (o la venta) también se borra el archivo: no quedan PDF huérfanos ocupando disco."""
+    if instance.file:
+        instance.file.delete(save=False)
 
 
 class SaleDetail(models.Model):

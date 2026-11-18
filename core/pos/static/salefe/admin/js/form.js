@@ -16,6 +16,8 @@ function fmtMoney(n) {
 
 // Variables globales para el manejo de múltiples PDFs
 var pdfDataTransfer = new DataTransfer();
+var PDF_MAX_MB = 5;            // tamaño máximo por documento anexo (lo vuelve a validar el servidor)
+var removedAttachments = [];   // ids de los documentos ya guardados que se quitan al editar la factura
 var selectedPdfUrls = [];
 var activePdfIndex = -1;
 
@@ -759,6 +761,7 @@ $(function () {
         var form = $(this)[0];
         var params = new FormData(form);
         params.append('products', JSON.stringify(sale.detail.products));
+        params.append('remove_attachments', JSON.stringify(removedAttachments));
 
         // Sincronizar DataTransfer al input del DOM por seguridad
         var fileInputDom = document.getElementById('form-file-multi');
@@ -804,7 +807,11 @@ function handlePdfFilesSelect(files) {
     for (var i = 0; i < files.length; i++) {
         var file = files[i];
 
-        if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
+        if (file.size > PDF_MAX_MB * 1024 * 1024) {
+            if (typeof toastr !== 'undefined') {
+                toastr.error('"' + file.name + '" pesa ' + (file.size / 1048576).toFixed(1) + ' MB y el máximo por documento es ' + PDF_MAX_MB + ' MB.');
+            }
+        } else if (file.type === "application/pdf" || file.name.toLowerCase().endsWith('.pdf')) {
             pdfDataTransfer.items.add(file);
             addedAny = true;
         } else {
@@ -955,6 +962,29 @@ $(function () {
     $('textarea[name="description"], #id_description').first().val(d.description).trigger('change');
     sale.detail.products = d.products;
     sale.listProducts();
+
+    // Documentos anexos que la factura ya tiene guardados (se pueden quitar; los nuevos se suman a estos)
+    if (d.attachments && d.attachments.length) {
+        var $list = $('#pdfExistingList').empty();
+        d.attachments.forEach(function (a) {
+            var $li = $('<li class="list-group-item d-flex justify-content-between align-items-center"></li>');
+            $('<a target="_blank" rel="noopener"></a>').attr('href', a.url)
+                .html('<i class="fas fa-file-pdf text-danger me-2"></i>').append(document.createTextNode(a.name)).appendTo($li);
+            $('<button type="button" class="btn btn-sm btn-outline-danger">Quitar</button>').on('click', function () {
+                var removed = removedAttachments.indexOf(a.id) !== -1;
+                if (removed) {
+                    removedAttachments = removedAttachments.filter(function (x) { return x !== a.id; });
+                } else {
+                    removedAttachments.push(a.id);
+                }
+                $li.toggleClass('text-decoration-line-through text-muted', !removed);
+                $(this).text(removed ? 'Quitar' : 'Conservar');
+            }).appendTo($li);
+            $list.append($li);
+        });
+        $('#pdfExisting').removeClass('d-none').closest('.card-body').show();
+        $('#pdfChevron').attr('class', 'fas fa-minus');
+    }
 
     // Montos
     input_propina.val(parseFloat(d.propina).toFixed(2));

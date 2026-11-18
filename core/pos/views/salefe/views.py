@@ -17,7 +17,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.clickjacking import xframe_options_exempt
 from django.conf import settings
 
-from core.pos import salefe_service
+from core.pos import attachments, salefe_service
 from core.pos.forms import *
 from core.pos.sale_deletion import delete_sale
 from core.pos.utilities import printer
@@ -93,6 +93,11 @@ class SaleFeListView(GroupPermissionMixin, FormView):
                 data = {
                     'client_name': sale.client.get_full_name(),
                     'emails': emails,
+                    # Anexos que se enviarán con la factura y los que ya se eliminaron (pasaron los días de conservación)
+                    'attachments': {'available': [a.get_name() if hasattr(a, 'get_name') else a.name.split('/')[-1]
+                                                  for a in sale.get_attachments()],
+                                    'purged': sale.get_purged_attachment_names(),
+                                    'days': attachments.RETENTION_DAYS, 'max_mb': attachments.MAX_MB},
                 }
             elif action == 'resend_email':
                 sale = Sale.objects.get(pk=request.POST.get('id'))
@@ -100,7 +105,11 @@ class SaleFeListView(GroupPermissionMixin, FormView):
                 if not target_email:
                     data['error'] = 'Debe seleccionar un correo de destino'
                 else:
-                    result = send_sale_electronic_invoice_email(sale, request=request, target_email=target_email)
+                    extra = request.FILES.getlist('pdf_files')
+                    for uploaded in extra:
+                        attachments.validate_pdf(uploaded)   # ValueError con el mensaje para el usuario
+                    result = send_sale_electronic_invoice_email(sale, request=request, target_email=target_email,
+                                                                extra_files=extra)
                     if result.get('success'):
                         data = {'success': True, 'message': result.get('message')}
                     else:
@@ -307,6 +316,7 @@ class SaleFeUpdateView(SaleFeCreateView):
     def sale_payload(self):
         """La factura tal como la necesita el formulario para cargarla (sin tocar nada de Factus)."""
         sale = self.sale
+        sale.ensure_attachment_rows()   # un anexo guardado con el campo antiguo se vuelve un anexo normal (se puede quitar)
         lines = []
         for d in sale.saledetail_set.select_related('product').order_by('id'):
             item = d.product.toJSON()
@@ -325,7 +335,9 @@ class SaleFeUpdateView(SaleFeCreateView):
             'dscto': float(sale.dscto) * 100, 'cash': float(sale.cash or 0), 'change': float(sale.change or 0),
             'propina': float(sale.propina or 0), 'nequi_value': float(sale.nequi_value or 0),
             'daviplata_value': float(sale.daviplata_value or 0), 'description': sale.description or '',
-            'attachment': sale.attachment.name.split('/')[-1] if sale.attachment else '',
+            'attachments': [{'id': a.pk, 'name': a.get_name(), 'url': a.file.url}
+                            for a in sale.attachments.filter(purged_at__isnull=True)],
+            'attachment_rules': {'days': attachments.RETENTION_DAYS, 'max_mb': attachments.MAX_MB},
             'products': lines,
         }
 
